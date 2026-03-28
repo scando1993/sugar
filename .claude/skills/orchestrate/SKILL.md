@@ -165,11 +165,12 @@ Write a `CLAUDE.md` file in each phase workspace root. This is the Ralph agent i
 
 **Template for each workspace CLAUDE.md:**
 
+Each iteration handles **ONE story** — just like Ralph. The `ralph-loop.sh` script (below) handles spawning fresh instances.
+
 ```markdown
 # Ralph Agent — [Phase Name]
 
-You are an autonomous coding agent working on phase "[phase-name]" of the task:
-[full $ARGUMENTS text]
+You are an autonomous coding agent. You handle ONE user story per invocation.
 
 ## Your Task
 
@@ -177,18 +178,23 @@ You are an autonomous coding agent working on phase "[phase-name]" of the task:
 2. Read `progress.txt` — check the Codebase Patterns section first
 3. Verify you are on branch `[branch-name]`. If not: `git checkout [branch-name]`
 4. Pick the **highest priority** user story where `passes: false`
-5. Implement that single user story
-6. Run quality checks (typecheck, lint, test — whatever the project uses)
-7. If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
-8. If checks fail → fix and retry (up to 3 attempts). If stuck:
+5. If no stories remain with `passes: false` → reply with: PHASE_COMPLETE
+6. Implement that single user story
+7. Run quality checks (typecheck, lint, test — whatever the project uses)
+8. If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
+9. If checks fail → fix and retry (up to 3 attempts). If stuck:
    - Set the story's `notes` field in prd.json to describe the blocker
    - Append failure to progress.txt
    - `git checkout -- .` to reset unstaged changes
-   - Move to the next story
-9. Update `prd.json` to set `passes: true` for the completed story
-10. Append progress to `progress.txt` (format below)
-11. If stories remain with `passes: false` → go back to step 4
+10. Update `prd.json` to set `passes: true` for the completed story
+11. Append progress to `progress.txt` (format below)
 12. When ALL stories have `passes: true` → push: `git push origin [branch-name]`
+
+## Stop Condition
+
+After completing a story, check if ALL stories have `passes: true`.
+If yes, push and reply with exactly: PHASE_COMPLETE
+If no, end your response normally — the loop script will spawn a fresh iteration.
 
 ## Progress Report Format
 
@@ -209,7 +215,7 @@ If you discover a reusable pattern, add it to the `## Codebase Patterns`
 section at the TOP of progress.txt. Only general, reusable patterns.
 
 ## Rules
-- ONE story at a time — do not batch
+- ONE story per iteration — implement one, then stop
 - ALL commits must pass quality checks
 - Do NOT commit broken code
 - Follow existing code patterns
@@ -220,62 +226,127 @@ section at the TOP of progress.txt. Only general, reusable patterns.
 - Phase scope: [scope from plan.md]
 - Workspace: [absolute path]
 - Branch: [branch-name]
-- Dependencies satisfied: [list what prior phases produced, or "none — this is in the first parallel group"]
-- Patterns from prior phases: [codebase patterns collected from completed phases, or "none yet"]
+- Dependencies satisfied: [list what prior phases produced, or "none — first parallel group"]
+- Patterns from prior phases: [codebase patterns from completed phases, or "none yet"]
 
 ## Task (repeated)
-Read prd.json. Pick highest priority story where passes is false. Implement it.
-Quality checks. Commit. Mark passes true. Append progress. Repeat until done. Push.
+Read prd.json. Pick highest priority story where passes is false. Implement ONE story.
+Quality checks. Commit. Mark passes true. Append progress. Stop. The loop handles iteration.
 ```
 
+#### Generate `ralph-loop.sh` in each workspace
+
+This is the iteration engine — equivalent to Ralph's `ralph.sh`. It spawns fresh agent instances in a loop, one story per iteration, until all stories pass or max iterations is reached.
+
+```bash
+#!/bin/bash
+# Ralph loop for phase: [phase-name]
+# Usage: ./ralph-loop.sh [max_iterations]
+set -e
+
+MAX_ITERATIONS=${1:-20}
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRD_FILE="$SCRIPT_DIR/prd.json"
+
+echo "Starting Ralph loop — Phase: [phase-name]"
+echo "Max iterations: $MAX_ITERATIONS"
+
+for i in $(seq 1 $MAX_ITERATIONS); do
+  echo ""
+  echo "========================================"
+  echo "  Iteration $i of $MAX_ITERATIONS"
+  echo "========================================"
+
+  OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+
+  if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
+    echo ""
+    echo "Phase [phase-name] complete at iteration $i!"
+    exit 0
+  fi
+
+  echo "Iteration $i done. Continuing..."
+  sleep 2
+done
+
+echo ""
+echo "Reached max iterations ($MAX_ITERATIONS) without completing all stories."
+echo "Check prd.json and progress.txt for status."
+exit 1
+```
+
+Make it executable: `chmod +x ralph-loop.sh`
+
 #### Rules
-- Every phase workspace must have all three files: `prd.json`, `progress.txt`, `CLAUDE.md`
+- Every workspace must have four files: `prd.json`, `progress.txt`, `CLAUDE.md`, `ralph-loop.sh`
 - Do not proceed to 3c until all workspaces are fully set up
 - Validate each `prd.json` is valid JSON with right-sized stories
 
 ---
 
-### Phase 3c — Parallel subagent execution
+### Phase 3c — Parallel execution via ralph-loop.sh
 
 #### Goal
-Launch subagents for all phases, running independent phases in parallel. Each subagent reads and follows its workspace `CLAUDE.md` autonomously.
+Launch the Ralph iteration loop for each phase in parallel. Each `ralph-loop.sh` spawns fresh agent instances — one story per iteration, fresh context each time — just like Ralph's `ralph.sh`.
+
+#### How iteration works
+
+```
+ralph-loop.sh (the loop — runs in bash)
+  ├── Iteration 1: claude < CLAUDE.md → implements US-001 → exits
+  ├── Iteration 2: claude < CLAUDE.md → implements US-002 → exits
+  ├── Iteration 3: claude < CLAUDE.md → implements US-003 → outputs PHASE_COMPLETE
+  └── Loop exits successfully
+```
+
+Each iteration is a **fresh agent instance with clean context**. Memory persists between iterations via:
+- `prd.json` — which stories are done (`passes: true/false`)
+- `progress.txt` — learnings and codebase patterns
+- git history — all committed code
+
+This is identical to how Ralph works. The agent never runs out of context because it handles only ONE story per invocation.
 
 #### Resuming after interruption
-Inherently resumable — invoke Phase 3c again. Each subagent picks up from the first `passes: false` story. `progress.txt` preserves learnings.
+Inherently resumable — re-run `ralph-loop.sh`. It spawns fresh iterations that pick up from the first `passes: false` story.
 
 #### Execution
 
-Follow `execution.md` group ordering:
+Follow `execution.md` group ordering.
 
-**For each parallel group** (independent phases):
-Launch ALL phases in the group simultaneously — one Agent tool call per phase, all in a single response:
+**For each parallel group** (independent phases), launch all `ralph-loop.sh` scripts simultaneously:
 
+```bash
+# Launch all independent phases in parallel
+/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 &
+PID_A=$!
+/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 &
+PID_B=$!
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 &
+PID_C=$!
+
+# Wait for all to complete
+wait $PID_A $PID_B $PID_C
+
+# Check results
+echo "Phase A exit: $?"
+echo "Phase B exit: $?"
+echo "Phase C exit: $?"
 ```
-Agent(prompt="cd /tmp/<repo>-phases/<phase-a> && read CLAUDE.md and follow it exactly", subagent_type="general-purpose")
-Agent(prompt="cd /tmp/<repo>-phases/<phase-b> && read CLAUDE.md and follow it exactly", subagent_type="general-purpose")
-Agent(prompt="cd /tmp/<repo>-phases/<phase-c> && read CLAUDE.md and follow it exactly", subagent_type="general-purpose")
-```
 
-Each subagent:
-1. Changes into its workspace
-2. Reads its `CLAUDE.md`
-3. Follows the Ralph loop autonomously
-4. Pushes when complete
+Use the Bash tool to execute this. Each `ralph-loop.sh` runs independently, spawning fresh `claude` instances per story.
 
 **For sequential groups** (depend on prior group):
 Wait for the prior group to complete. Before launching the next group:
 1. Collect Codebase Patterns from all completed workspaces' `progress.txt`
-2. Update the next group's `CLAUDE.md` files with those patterns in the "Patterns from prior phases" field
+2. Update the next group's `CLAUDE.md` files with those patterns
 3. Update `execution.md` with actual results
-4. Launch the next group
-
-**Retry logic:**
-After a subagent completes, check its `prd.json`. If any non-blocked stories still have `passes: false` (no notes), re-launch the subagent — it will pick up where it left off.
+4. Launch the next group's `ralph-loop.sh` scripts in parallel
 
 #### Completion tracking
-- Phase complete when all stories in `prd.json` have `passes: true`
+- Phase complete when `ralph-loop.sh` exits 0 (all stories `passes: true`)
 - After each group, sync results back to `todo.md` checkboxes
 - Record any deviations in `execution.md`
+- If a loop exits non-zero (max iterations), check `prd.json` for blocked stories
 
 #### Rules
 - Never launch a dependent phase before prerequisites are confirmed complete
@@ -380,6 +451,7 @@ Repo-root tracking files preserved. Phase-local files deleted with worktree.
 | `prd.json` | each worktree | Phase 3b |
 | `progress.txt` | each worktree | Phase 2 |
 | `CLAUDE.md` | each worktree | Phase 3b |
+| `ralph-loop.sh` | each worktree | Phase 3b |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---
