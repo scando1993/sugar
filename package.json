@@ -1,0 +1,19 @@
+{
+  "name": "orchestation-skills",
+  "version": "1.0.0",
+  "description": "Claude Code skill for orchestrating complex tasks across multiple agents",
+  "main": "dist/index.js",
+  "bin": {
+    "orchestrate": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^5.5.3"
+  },
+  "private": true
+}
