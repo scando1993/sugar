@@ -1,0 +1,6 @@
+{
+  "name": "orchestation-skills",
+  "version": "1.0.0",
+  "description": "Phased software engineering execution with PRD-driven implementation. Includes phase orchestration, PRD generation, and Ralph-style autonomous agent loops.",
+  "skills": "../.claude/skills/"
+}
