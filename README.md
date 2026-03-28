@@ -185,6 +185,42 @@ Skips to Phase 4.
 
 ---
 
+## Error recovery
+
+If quality checks fail after implementing a story, the Ralph loop:
+1. Reads the error output
+2. Attempts to fix the code (up to 3 tries)
+3. If fixed, continues to commit
+4. If stuck, records the blocker in `prd.json` notes and `progress.txt`, resets unstaged changes, and moves to the next story
+
+No story is left in a broken state. Blocked stories are visible in `prd.json` and surfaced by the CLI (`orchestrate status`).
+
+## Resuming after interruption
+
+The workflow is fully resumable. If a session is interrupted mid-Phase 3:
+
+1. Invoke `/phase` with the same task
+2. Tell it to start from Phase 3c
+3. Each phase's Ralph loop picks up from the first story where `passes: false`
+4. `progress.txt` preserves all prior learnings
+
+No special recovery steps needed.
+
+## Aborting
+
+To tear down all phase workspaces and branches:
+
+```bash
+git worktree list                                                    # see what exists
+git worktree remove /tmp/<repo>-phases/<phase> --force               # remove each worktree
+git branch -D <branch-name>                                          # delete branches
+git worktree prune                                                   # clean up references
+```
+
+Tracking files in the main repo (`plan.md`, `todo.md`, `execution.md`) are preserved for reference.
+
+---
+
 ## Project structure
 
 ```
@@ -197,23 +233,37 @@ Skips to Phase 4.
   prompts/
     phase.prompt.md          ← Copilot prompt file
 src/
-  index.ts                   ← CLI utility (validate/print orchestration plans)
-  types.ts                   ← TypeScript types
+  index.ts                   ← CLI utility (validate prd.json, report status)
+  types.ts                   ← TypeScript types (matches Ralph prd.json format)
 ```
 
 ### CLI utility
 
-The TypeScript CLI can validate or visualize orchestration plans:
+The TypeScript CLI validates `prd.json` files and reports phase completion status:
 
 ```bash
 npm install
 npm run build
 
-# Validate a plan JSON file
-node dist/index.js validate plan.json
+# Validate a prd.json file (checks required fields, story ordering, acceptance criteria)
+node dist/index.js validate /tmp/myapp-phases/phase-a-types/prd.json
 
-# Print an execution plan
-node dist/index.js print plan.json
+# Show story completion status for a single phase
+node dist/index.js status /tmp/myapp-phases/phase-a-types/prd.json
+
+# Scan all phase workspaces and show aggregate progress
+node dist/index.js status-all /tmp/myapp-phases
+```
+
+Example `status-all` output:
+```
+Phase Workspace Status: /tmp/myapp-phases
+============================================================
+  phase-a-types                ████████████████████ DONE
+  phase-b-api                  ████████████░░░░░░░░ 3/5
+  phase-c-ui                   ░░░░░░░░░░░░░░░░░░░░ 0/4
+──────────────────────────────────────────────────────────────
+  Total: 7/13 stories passing
 ```
 
 ---

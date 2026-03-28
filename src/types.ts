@@ -1,29 +1,22 @@
-export type Complexity = 'low' | 'medium' | 'high';
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed';
-
-export interface SubTask {
+export interface UserStory {
   id: string;
   title: string;
   description: string;
-  dependencies: string[];
-  complexity: Complexity;
-  agentType?: string;
+  acceptanceCriteria: string[];
+  priority: number;
+  passes: boolean;
+  notes: string;
 }
 
-export interface Phase {
-  name: string;
-  parallel: boolean;
-  tasks: SubTask[];
+export interface PrdJson {
+  project: string;
+  branchName: string;
+  description: string;
+  userStories: UserStory[];
 }
 
-export interface OrchestrationPlan {
-  goal: string;
-  phases: Phase[];
-}
-
-export interface AgentResult {
-  taskId: string;
-  success: boolean;
-  output: string;
-  error?: string;
+export interface ValidationError {
+  field: string;
+  message: string;
+  storyId?: string;
 }

@@ -27,13 +27,7 @@ This skill's implementation model is based on **Ralph** (https://github.com/snar
 
 ## Prompt reinforcement
 
-This skill uses **prompt repetition** to improve execution quality. When presenting context and instructions together, repeat the core instruction so every token attends to every other token.
-
-Apply this at every decision boundary:
-
-1. **Skill level**: The task is stated above and restated before each phase begins.
-2. **Phase transitions**: Before starting any phase, restate the original task and the specific goal of that phase.
-3. **Per-story execution**: Before implementing each story, restate the story scope and acceptance criteria.
+Use **prompt repetition** at every decision boundary: state the task, provide context, give the instruction, restate context briefly, repeat the instruction. This ensures the model attends fully to both context and instruction regardless of prompt length. Apply at skill level (restate `${input}` before each phase), per-phase (restate phase goal), and per-story (restate acceptance criteria before implementing).
 
 ---
 
@@ -92,27 +86,26 @@ Create `todo.md` at the repo root containing:
 ### Goal
 Create isolated workspaces and branches for each execution phase.
 
-**Restate**: The original task is `${input}`. This phase creates one workspace and one branch per execution phase, with the original repo as remote. No implementation yet.
+**Restate**: The original task is `${input}`. This phase creates one workspace and one branch per execution phase. No implementation yet.
 
 ### Preconditions
 Only start after explicit user approval.
 
 ### Actions
 
-Use the terminal to set up workspaces. For each phase defined in `plan.md` / `todo.md`:
+Use **git worktree** for lightweight, isolated workspaces:
 
 ```bash
-# Option A: git worktree (preferred — lightweight, shared .git)
-git worktree add /tmp/<repo-name>-phases/<phase-name> -b <branch-name>
+# Create a base directory for all phase workspaces
+mkdir -p /tmp/<repo-name>-phases
 
-# Option B: full copy (if worktrees are not suitable)
-cp -r . /tmp/<repo-name>-phases/<phase-name>
-cd /tmp/<repo-name>-phases/<phase-name>
-git checkout -b <branch-name>
-git remote set-url origin <original-repo-path>
+# For each phase:
+git worktree add /tmp/<repo-name>-phases/<phase-name> -b <branch-name>
 ```
 
-Initialize a `progress.txt` in each workspace root:
+If the user provides a different base path, use that instead.
+
+For each workspace, initialize `progress.txt`:
 ```
 # Phase Progress Log
 Started: [timestamp]
@@ -120,17 +113,12 @@ Started: [timestamp]
 ```
 
 Branch naming pattern:
-- `phase-1-planning`
-- `phase-2-setup`
-- `phase-3-<feature-or-scope>`
-- `phase-4-merge`
-
-Or when splitting implementation across multiple branches:
 - `phase-a-<scope>`
 - `phase-b-<scope>`
+- `phase-c-<scope>`
 
 ### Rules
-- One workspace per phase, one branch per phase
+- One worktree per phase, one branch per phase
 - Each workspace must map clearly to its phase
 - Do not start implementation unless the user explicitly approves Phase 3
 - Document any setup problems in `plan.md` and `todo.md`
@@ -181,31 +169,26 @@ Write the execution plan and generate a Ralph-format `prd.json` for each phase w
 
 **Create `execution.md`** at the repo root containing:
 
-**1. Dependency graph**
+**1. Dependency graph** — ASCII visualization with arrows for hard dependencies:
 ```
 [phase-a-types] ──→ [phase-c-implementation]
 [phase-b-tests] ──→ [phase-c-implementation]
 [phase-a-types]  ║  [phase-b-tests]  (parallel)
 ```
 
-**2. Parallel execution groups**
-- Group 1: phases that can all start immediately (no dependencies)
-- Group 2: phases that start after Group 1 completes
-- Group N: etc.
+**2. Parallel execution groups** — Group 1 (no dependencies), Group 2 (after Group 1), etc.
 
-**3. Execution order** — numbered sequence of groups
+**3. Execution order** — Numbered sequence of groups.
 
-**4. Critical path** — the longest sequential chain and why it is the bottleneck
+**4. Critical path** — The longest sequential chain and why it bottlenecks.
 
-**5. Risk assessment per group** — conflict likelihood, shared file concerns
+**5. Risk assessment** — Conflict likelihood, shared file concerns, mitigation notes.
 
-**6. Rationale** — why this ordering is safest and most efficient
+**6. Rationale** — Why this ordering is safest and most efficient.
 
 ---
 
-**Generate `prd.json`** in each phase workspace.
-
-For each phase, convert its tasks from `todo.md` into Ralph-format user stories:
+**Generate `prd.json`** in each phase workspace:
 
 ```json
 {
@@ -250,6 +233,9 @@ For each phase, convert its tasks from `todo.md` into Ralph-format user stories:
 #### Goal
 Execute all phases by working through each phase's `prd.json` stories one at a time.
 
+#### Resuming after interruption
+The Ralph loop is inherently resumable. To resume a previously interrupted run, invoke Phase 3c — the loop picks up from the first story where `passes: false` in each `prd.json`. No special recovery needed; `progress.txt` preserves all prior learnings.
+
 #### Execution strategy
 
 Follow `execution.md` strictly.
@@ -262,15 +248,13 @@ Follow `execution.md` strictly.
 4. Push the branch to origin
 5. Move to the next phase
 
-**If phases are independent** (marked parallel in `execution.md`), tell the user they can open multiple Copilot sessions — one per phase workspace — to run them concurrently. Each session follows the same Ralph loop independently.
+**If phases are independent** (marked parallel in `execution.md`), tell the user they can open multiple Copilot sessions — one per phase workspace — to run them concurrently.
 
 ---
 
 #### The Ralph loop (execute for every phase)
 
 ```
-For the current phase workspace:
-
 1. Read prd.json
 2. Read progress.txt — check the Codebase Patterns section first
 3. Verify you are on the correct branch. If not, check it out.
@@ -278,13 +262,26 @@ For the current phase workspace:
 5. Restate: "I am implementing [Story ID]: [Title]. Acceptance criteria: [list them]."
 6. Implement that single user story
 7. Run quality checks (typecheck, lint, test — whatever the project uses)
-8. If checks pass, commit ALL changes:
-   git commit -m "feat: [Story ID] - [Story Title]"
-9. Update prd.json — set passes to true for the completed story
-10. Append progress to progress.txt (format below)
-11. If stories remain with passes: false → go back to step 4
-12. When ALL stories have passes: true → push branch to origin
+8. If checks pass → commit: git commit -m "feat: [Story ID] - [Story Title]"
+9. If checks fail → see Error Recovery below
+10. Update prd.json — set passes to true for the completed story
+11. Append progress to progress.txt (format below)
+12. If stories remain with passes: false → go back to step 4
+13. When ALL stories have passes: true → push branch to origin
 ```
+
+#### Error recovery
+
+If quality checks fail after implementing a story:
+1. Read the error output carefully
+2. Fix the failing code
+3. Re-run quality checks
+4. If fixed → continue to commit step
+5. If stuck after 3 attempts → record the blocker:
+   - Set the story's `notes` field in prd.json to describe the failure
+   - Append the failure to progress.txt
+   - Reset unstaged changes: `git checkout -- .`
+   - Move to the next story
 
 #### Progress report format
 
@@ -302,33 +299,19 @@ APPEND to progress.txt (never replace):
 
 #### Consolidate patterns
 
-If you discover a reusable pattern, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create the section if it doesn't exist):
-
-```
-## Codebase Patterns
-- Example: Always use IF NOT EXISTS for migrations
-- Example: Export types from actions.ts for UI components
-```
-
-Only add patterns that are general and reusable, not story-specific.
+If you discover a reusable pattern, add it to the `## Codebase Patterns` section at the TOP of progress.txt (create it if it doesn't exist). Only add patterns that are general and reusable, not story-specific.
 
 #### Before moving to the next phase group
 - Collect Codebase Patterns from all completed phase workspaces
 - Carry those patterns forward as context when starting the next group
 - Update `execution.md` with actual results and any deviations
 
-#### Quality requirements
-- ALL commits must pass quality checks — do NOT commit broken code
-- Keep changes focused and minimal
-- Follow existing code patterns
-- One story at a time — do not batch
-
 #### Rules
+- One story at a time — do not batch
+- One story per commit — keep work reviewable
+- ALL commits must pass quality checks — do NOT commit broken code
 - Do not mix unrelated changes between phases
-- Keep work reviewable — one story per commit
 - Record blockers in `todo.md`, `execution.md`, and `progress.txt`
-- Prefer low-risk changes over broad rewrites
-- Preserve behavior unless the task explicitly requires behavior changes
 - Never start a dependent phase before its prerequisites are confirmed complete
 
 ---
@@ -362,13 +345,44 @@ Create `merge_order.md` at the repo root. Use `execution.md` dependency analysis
 # For each branch in merge order:
 git checkout main
 git merge <branch-name> --no-ff
-# Run validation
-# If conflicts: resolve, document in merge_order.md, then continue
+# Run validation after each merge before continuing
 ```
 - Merge branches in the documented order
 - Resolve conflicts using best engineering judgment
 - Update `merge_order.md` with actual conflict notes
 - Validate after each merge before continuing
+
+### Post-merge validation
+
+After all branches are merged, run full validation on the final result:
+1. Run the complete test suite
+2. Run typecheck, lint, and any project-level quality checks
+3. If validation fails, document which merge introduced the failure in `merge_order.md`
+4. Fix or revert the offending merge before declaring Phase 4 complete
+
+Phase 4 is **not complete** until the merged result passes all quality checks.
+
+---
+
+## Abort and cleanup
+
+To abort the workflow and tear down all phase workspaces:
+
+```bash
+# List all phase worktrees
+git worktree list
+
+# Remove each phase worktree
+git worktree remove /tmp/<repo-name>-phases/<phase-name> --force
+
+# Delete phase branches if no longer needed
+git branch -D <phase-branch-name>
+
+# Prune stale worktree references
+git worktree prune
+```
+
+Tracking files (`plan.md`, `todo.md`, `execution.md`) remain in the main repo for reference. Phase-local files (`prd.json`, `progress.txt`) are deleted with the worktree.
 
 ---
 
@@ -397,6 +411,12 @@ git merge <branch-name> --no-ff
 - Apply prompt repetition at every phase boundary
 - Propagate codebase patterns from completed phases to upcoming phases
 
+### Source of truth
+- **Before Phase 3c**: `todo.md` is the authoritative task list
+- **During Phase 3c**: `prd.json` is the source of truth for each phase
+- **After each phase completes**: sync `prd.json` results back to `todo.md` checkboxes
+- If `todo.md` and `prd.json` conflict during execution, `prd.json` wins for that phase
+
 ### Story design (Ralph rules)
 - Completable in one focused pass
 - Ordered by dependency (schema → backend → UI)
@@ -414,9 +434,9 @@ git merge <branch-name> --no-ff
 
 Unless the user says otherwise:
 - Current repository is the source of truth
-- Git worktrees preferred for workspace isolation
+- Git worktrees are used for workspace isolation
 - Phases are derived from the task scope
-- Tracking files live at repo root; `prd.json` and `progress.txt` live in each phase workspace
+- Tracking files live at repo root; `prd.json` and `progress.txt` live in each phase worktree
 - Validation includes tests, linting, type checks where relevant
 
 ---
@@ -428,8 +448,8 @@ Unless the user says otherwise:
 | `plan.md` | repo root | Phase 1 | Execution plan, assumptions, risks, dependency map |
 | `todo.md` | repo root | Phase 1 | Task breakdown with checkboxes, grouped by phase |
 | `execution.md` | repo root | Phase 3b | Dependency graph, parallel groups, implementation order |
-| `prd.json` | each phase workspace | Phase 3b | Ralph-format user stories for that phase |
-| `progress.txt` | each phase workspace | Phase 2 | Progress log with learnings and codebase patterns |
+| `prd.json` | each phase worktree | Phase 3b | Ralph-format user stories for that phase |
+| `progress.txt` | each phase worktree | Phase 2 | Progress log with learnings and codebase patterns |
 | `merge_order.md` | repo root | Phase 4 | Merge sequence, conflict expectations, validation steps |
 
 ---
