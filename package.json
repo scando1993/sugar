@@ -1,5 +1,5 @@
 {
-  "name": "orchestation-skills",
+  "name": "orchestration-skills",
   "version": "1.0.0",
   "description": "Claude Code skill for orchestrating complex tasks across multiple agents",
   "main": "dist/index.js",

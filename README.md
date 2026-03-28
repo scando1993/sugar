@@ -29,24 +29,42 @@ Each phase requires explicit user approval before proceeding. Each implementatio
 
 ```bash
 # Clone into your project or add as a plugin
-git clone https://github.com/<your-org>/orchestation-skills .claude/plugins/orchestation-skills
+git clone https://github.com/<your-org>/orchestration-skills .claude/plugins/orchestration-skills
 
 # Or copy the skill directly
-cp -r orchestation-skills/.claude/skills/orchestrate .claude/skills/orchestrate
+cp -r orchestration-skills/.claude/skills/orchestrate .claude/skills/orchestrate
 
 # Invoke
 /phase refactor the auth module into separate concerns with full test coverage
 ```
 
-### GitHub Copilot (VS Code / JetBrains)
+### GitHub Copilot — Custom Agents (recommended)
 
 ```bash
-# Copy the prompt file into your project
-mkdir -p .github/prompts
-cp orchestation-skills/.github/prompts/phase.prompt.md .github/prompts/
+# Copy agent profiles into your project
+mkdir -p .github/agents
+cp orchestration-skills/.github/agents/phase.md .github/agents/
+cp orchestration-skills/.github/agents/prd.md .github/agents/
+cp orchestration-skills/.github/agents/ralph.md .github/agents/
 
 # Optionally copy the base instructions
-cp orchestation-skills/.github/copilot-instructions.md .github/
+cp orchestration-skills/AGENTS.md ./AGENTS.md
+cp orchestration-skills/.github/copilot-instructions.md .github/
+
+# Invoke via Copilot Chat
+@phase refactor the auth module into separate concerns with full test coverage
+@prd plan a new notification system
+@ralph convert tasks/prd-notifications.md
+```
+
+### GitHub Copilot — Prompt Files (alternative)
+
+```bash
+# Copy prompt files into your project
+mkdir -p .github/prompts
+cp orchestration-skills/.github/prompts/phase.prompt.md .github/prompts/
+cp orchestration-skills/.github/prompts/prd.prompt.md .github/prompts/
+cp orchestration-skills/.github/prompts/ralph.prompt.md .github/prompts/
 
 # Invoke via Copilot Chat
 /phase refactor the auth module into separate concerns with full test coverage
@@ -226,6 +244,7 @@ Tracking files in the main repo (`plan.md`, `todo.md`, `execution.md`) are prese
 ## Project structure
 
 ```
+AGENTS.md                     ← Copilot coding agent instructions (repo-level)
 .claude/
   skills/
     orchestrate/SKILL.md     ← /phase — main orchestration skill
@@ -234,11 +253,15 @@ Tracking files in the main repo (`plan.md`, `todo.md`, `execution.md`) are prese
 .claude-plugin/
   plugin.json                 ← installable as Claude Code plugin
 .github/
+  agents/
+    phase.md                  ← @phase — orchestration custom agent
+    prd.md                    ← @prd — PRD generator custom agent
+    ralph.md                  ← @ralph — PRD converter custom agent
   copilot-instructions.md    ← Copilot base instructions
   prompts/
-    phase.prompt.md           ← /phase for Copilot
-    prd.prompt.md             ← /prd for Copilot
-    ralph.prompt.md           ← /ralph for Copilot
+    phase.prompt.md           ← /phase for Copilot (prompt file)
+    prd.prompt.md             ← /prd for Copilot (prompt file)
+    ralph.prompt.md           ← /ralph for Copilot (prompt file)
 src/
   index.ts                    ← CLI (validate prd.json, report status)
   types.ts                    ← TypeScript types (Ralph prd.json format)
@@ -283,10 +306,10 @@ wait
 
 ```bash
 # Install in any Claude Code project
-claude plugin add /path/to/orchestation-skills
+claude plugin add /path/to/orchestration-skills
 
 # Or clone and reference
-git clone <repo-url> ~/.claude/plugins/orchestation-skills
+git clone <repo-url> ~/.claude/plugins/orchestration-skills
 ```
 
 ### CLI utility
@@ -324,11 +347,12 @@ Phase Workspace Status: /tmp/myapp-phases
 
 | Capability | Claude Code | GitHub Copilot |
 |---|---|---|
-| Invoke | `/phase <task>` | `/phase <task>` |
+| Invoke | `/phase <task>` | `@phase <task>` (agent) or `/phase <task>` (prompt) |
 | Parallel subagents | Native (Agent tool) | Manual (multiple sessions) |
 | Task tracking | TaskCreate + file-based | File-based only |
 | Workspaces | Full repo copy | git worktree preferred |
 | Auto-trigger | Yes (description match) | No (manual invoke only) |
+| Agent profiles | `.claude/skills/` | `.github/agents/` |
 
 The workflow, Ralph pattern, managed files, and execution discipline are identical across both platforms.
 
