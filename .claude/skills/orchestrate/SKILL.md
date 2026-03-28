@@ -1,6 +1,6 @@
 ---
 name: phase
-description: Phased software engineering execution for large refactors, migrations, feature work, testing efforts, and modularization. Executes through strict planning → workspace setup → dependency analysis → parallel implementation → merge phases, with user approval required between each phase. Use when a task needs isolated workspaces per phase, atomic commits, parallel branches, and controlled merge sequencing.
+description: Phased software engineering execution for large refactors, migrations, feature work, testing efforts, and modularization. Executes through strict planning → workspace setup → dependency analysis → PRD-driven parallel implementation → merge phases, with user approval required between each phase. Each subagent follows the Ralph agent pattern (one story at a time, atomic commits, progress tracking, pattern consolidation). Use when a task needs isolated workspaces per phase, atomic commits, parallel branches, and controlled merge sequencing.
 argument-hint: "<engineering task description>"
 allowed-tools: Agent, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash, Read, Write, Edit, Glob, Grep
 ---
@@ -9,6 +9,12 @@ allowed-tools: Agent, TaskCreate, TaskUpdate, TaskList, TaskGet, Bash, Read, Wri
 
 ## Task
 $ARGUMENTS
+
+---
+
+## Reference implementation
+
+This skill's subagent execution model is based on **[Ralph](https://github.com/snarktank/ralph)** — an autonomous agent loop that drives implementation through PRD-defined user stories with progress tracking and pattern consolidation. Each subagent in Phase 3c follows the Ralph agent discipline.
 
 ---
 
@@ -94,6 +100,12 @@ For each phase defined in `plan.md` / `todo.md`:
 1. Copy the current repository into a dedicated folder named after the phase
 2. Create or checkout the corresponding branch for that phase
 3. Set the original repository as the remote for that copied workspace
+4. Initialize a `progress.txt` in the workspace root:
+   ```
+   # Phase Progress Log
+   Started: [timestamp]
+   ---
+   ```
 
 Branch naming pattern:
 - `phase-1-planning`
@@ -118,7 +130,7 @@ Or when splitting implementation across multiple branches:
 ### Preconditions
 Only start after explicit user approval.
 
-**Restate**: The original task is `$ARGUMENTS`. This phase analyzes dependencies, builds a parallel execution plan, and then implements all phases — running independent phases concurrently as subagents.
+**Restate**: The original task is `$ARGUMENTS`. This phase analyzes dependencies, builds a parallel execution plan, generates per-phase PRDs, and then implements all phases — running independent phases concurrently as Ralph-style subagents.
 
 Phase 3 has three sub-phases that execute sequentially within it: **3a → 3b → 3c**.
 
@@ -148,14 +160,14 @@ Build a mental dependency graph:
 
 ---
 
-### Phase 3b — Create execution.md
+### Phase 3b — Create execution.md and per-phase prd.json
 
 #### Goal
-Write the execution plan as a concrete, actionable document.
+Write the execution plan and generate a Ralph-format `prd.json` for each phase workspace.
 
 #### Actions
 
-Create `execution.md` at the repo root containing:
+**Create `execution.md`** at the repo root containing:
 
 **1. Dependency graph**
 - ASCII visualization of the dependency graph
@@ -194,17 +206,65 @@ Example format:
 - Why this ordering is safest and most efficient
 - What alternatives were considered and rejected
 
+---
+
+**Generate `prd.json`** in each phase workspace.
+
+For each phase, convert its tasks from `todo.md` into Ralph-format user stories:
+
+```json
+{
+  "project": "[repo name]",
+  "branchName": "[phase branch name]",
+  "description": "[phase scope from plan.md]",
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "[story title derived from task]",
+      "description": "As a developer, I need [what] so that [why from plan.md]",
+      "acceptanceCriteria": [
+        "Specific verifiable criterion from todo.md",
+        "Another criterion",
+        "Typecheck passes"
+      ],
+      "priority": 1,
+      "passes": false,
+      "notes": ""
+    }
+  ]
+}
+```
+
+#### Story sizing rules (from Ralph)
+- Each story must be completable in one focused pass
+- If you cannot describe the change in 2-3 sentences, split it
+- Right-sized: add a component, update a module, write tests for one unit
+- Too big: "refactor the entire API" — split into one story per endpoint
+
+#### Story ordering rules
+- Stories execute in priority order within the phase
+- Earlier stories must not depend on later ones
+- Order: schema/data changes → backend logic → UI/consumers → validation
+
+#### Acceptance criteria rules
+- Every criterion must be verifiable, not vague
+- Good: "Add status column with default 'pending'"
+- Bad: "Works correctly"
+- Always include as final criterion: "Typecheck passes"
+- For testable logic, also include: "Tests pass"
+
 #### Rules
 - `execution.md` must be concrete enough that a human could follow it manually
 - Every ordering decision must have a stated reason
-- Do not proceed to 3c until `execution.md` is written
+- Each `prd.json` must be valid JSON, written to the phase workspace root
+- Do not proceed to 3c until both `execution.md` and all `prd.json` files are written
 
 ---
 
-### Phase 3c — Implementation via parallel subagents
+### Phase 3c — Implementation via Ralph-style subagents
 
 #### Goal
-Execute all phases, launching independent phases as concurrent subagents and sequencing dependent phases.
+Execute all phases. Each subagent follows the Ralph agent pattern: read the PRD, work through stories one at a time, commit atomically, track progress, consolidate learnings.
 
 #### Actions
 
@@ -218,52 +278,106 @@ Follow `execution.md` strictly:
 - Wait for the predecessor phase to complete before launching the dependent phase
 - Pass relevant outputs from the completed phase as context to the next subagent
 
-**Subagent prompt structure** (prompt repetition applied):
+---
 
-Every subagent prompt must follow this exact structure:
+#### Subagent prompt template
+
+Every subagent prompt must follow this exact structure. This combines prompt repetition with the Ralph agent discipline:
 
 ```
-CONTEXT:
+# Ralph Agent — [Phase Name]
+
+## Context
 - Original task: [full $ARGUMENTS]
 - Your phase: [phase name and scope from plan.md]
-- Your tasks: [exact tasks from todo.md for this phase]
-- Your workspace: [path to phase workspace]
+- Your workspace: [absolute path to phase workspace]
 - Your branch: [branch name]
 - Dependencies satisfied: [what completed phases produced, if any]
+- Patterns from prior phases: [codebase patterns from other phases' progress.txt, if any]
 
-INSTRUCTION:
-Implement the tasks listed above for [phase name]. Work incrementally.
-Make small, atomic, descriptive commits. Update todo.md as you complete
-each task. Push to the original repo when done.
+## Your Task
 
-CONTEXT SUMMARY:
-You are working on [phase name] as part of: [one-line $ARGUMENTS summary].
-Your [N] tasks are in [workspace path] on branch [branch name].
+You are an autonomous coding agent working on phase "[phase name]"
+of the task: [full $ARGUMENTS].
 
-INSTRUCTION (REPEATED):
-Implement all tasks for [phase name]. Commit incrementally. Update
-todo.md. Push when complete. Do not touch files outside your phase scope.
+Follow this loop for every story in your prd.json:
+
+1. Read `prd.json` at [workspace path]/prd.json
+2. Read `progress.txt` — check the Codebase Patterns section first
+3. Verify you are on branch `[branch name]`. If not, check it out.
+4. Pick the **highest priority** user story where `passes: false`
+5. Implement that single user story
+6. Run quality checks (typecheck, lint, test — whatever the project uses)
+7. If checks pass, commit ALL changes with message: `feat: [Story ID] - [Story Title]`
+8. Update `prd.json` to set `passes: true` for the completed story
+9. Append your progress to `progress.txt` (format below)
+10. If stories remain with `passes: false`, go back to step 4
+11. When ALL stories have `passes: true`, push branch to origin and stop
+
+## Progress report format
+
+APPEND to progress.txt (never replace, always append):
+
+```
+## [Date/Time] - [Story ID]
+- What was implemented
+- Files changed
+- **Learnings for future iterations:**
+  - Patterns discovered
+  - Gotchas encountered
+  - Useful context for other phases
+---
 ```
 
-**Per-subagent rules:**
-1. Implement only that phase's assigned tasks
-2. Work incrementally with small, meaningful, atomic commits
-3. Update `plan.md` if the plan evolves
-4. Update `todo.md` continuously — check off completed tasks
-5. Push the branch to the original repository when the phase is complete
+## Consolidate patterns
 
-**Completion tracking:**
-- A phase is **complete only** when all tasks assigned to it in `todo.md` are checked off
+If you discover a reusable pattern, add it to the `## Codebase Patterns`
+section at the TOP of progress.txt (create the section if it doesn't exist).
+
+```
+## Codebase Patterns
+- Example: Always use IF NOT EXISTS for migrations
+- Example: Export types from actions.ts for UI components
+```
+
+Only add patterns that are general and reusable, not story-specific.
+
+## Quality requirements
+- ALL commits must pass quality checks
+- Do NOT commit broken code
+- Keep changes focused and minimal
+- Follow existing code patterns
+- One story at a time — do not batch
+
+## Context summary
+You are the Ralph agent for [phase name], working at [workspace path]
+on branch [branch name]. Your prd.json has [N] stories. Work through
+them one at a time in priority order.
+
+## Task (repeated)
+Read prd.json. Pick the highest priority story where passes is false.
+Implement it. Run quality checks. Commit with feat: [Story ID] - [Title].
+Mark passes true. Append progress. Repeat until all stories pass.
+Then push to origin.
+```
+
+---
+
+#### Completion tracking
+
+- A phase is **complete only** when all stories in its `prd.json` have `passes: true`
 - After each parallel group completes, update `execution.md` with actual results and any deviations
+- After each parallel group completes, collect `progress.txt` from each workspace and propagate Codebase Patterns to subagents in the next group
 - If a subagent fails or encounters blockers, record the failure in `execution.md` and `todo.md` before proceeding
 
-### Rules
+#### Rules
 - Do not mix unrelated changes between phases
-- Keep work reviewable
-- Record blockers clearly in `todo.md` and `execution.md`
+- Keep work reviewable — one story per commit
+- Record blockers clearly in `todo.md`, `execution.md`, and `progress.txt`
 - Prefer low-risk changes over broad rewrites
 - Preserve behavior unless the task explicitly requires behavior changes
 - Never launch a dependent phase before its prerequisites are confirmed complete
+- Propagate codebase patterns between sequential groups so later phases benefit from earlier learnings
 
 ---
 
@@ -306,7 +420,7 @@ Create `merge_order.md` at the repo root. Use `execution.md` dependency analysis
 | Planning only / no qualifier | Phase 1 |
 | Planning is already approved | Phase 2 |
 | Setup is already done | Phase 3 (starts with 3a dependency analysis) |
-| Execution plan exists, ready to implement | Phase 3c |
+| Execution plan and PRDs exist, ready to implement | Phase 3c |
 | All branches done, wants integration | Phase 4 |
 | Testing only | Phase 1 (testing strategy + task breakdown), then follow normal flow |
 
@@ -318,18 +432,28 @@ Create `merge_order.md` at the repo root. Use `execution.md` dependency analysis
 - Adapt the workflow to the user's specific prompt
 - Never skip phases or continue without approval
 - Prefer maintainability, correctness, testability, and low-risk integration
-- Keep all markdown files current throughout (`plan.md`, `todo.md`, `execution.md`, `merge_order.md`)
+- Keep all tracking files current throughout
 - Document assumptions and blockers explicitly — never hide them
-- Preserve an audit trail through commits and markdown updates
+- Preserve an audit trail through commits, prd.json updates, and progress.txt entries
 - Apply prompt repetition at every phase boundary and in every subagent prompt
+- Propagate codebase patterns from completed phases to upcoming phases
 
 ### Task design
 Tasks in `todo.md` must be small, actionable, idempotent, resumable, and grouped logically by phase so another engineer could pick up from them.
 
+### Story design (Ralph rules)
+Stories in `prd.json` must be:
+- Completable in one focused pass (if you cannot describe it in 2-3 sentences, split it)
+- Ordered by dependency within the phase (schema → backend → UI)
+- Have verifiable acceptance criteria (not vague)
+- Always include "Typecheck passes" as a criterion
+
 ### Commits
+- One commit per story: `feat: [Story ID] - [Story Title]`
 - Small, meaningful, descriptive
 - Limited to one logical unit of work
 - Never bundle unrelated changes
+- ALL commits must pass quality checks before being created
 
 ---
 
@@ -339,7 +463,7 @@ Unless the user says otherwise:
 - Current repository is the source of truth
 - The original repository is the remote for copied workspaces
 - Phases are derived from the task scope
-- Markdown tracking files live at repo root
+- Tracking files live at repo root; `prd.json` and `progress.txt` live in each phase workspace
 - Validation includes tests, linting, type checks, and basic runtime sanity where relevant
 
 ---
@@ -350,9 +474,11 @@ This skill succeeds when:
 - Work is clearly phased and isolated
 - Planning is complete before any implementation
 - Dependencies are analyzed and documented in `execution.md`
-- Independent phases execute in parallel as concurrent subagents
-- Progress is visible and current in `todo.md`
-- Implementation is incremental and auditable via commits
+- Each phase has a valid `prd.json` with right-sized stories
+- Independent phases execute in parallel as concurrent Ralph-style subagents
+- Each story is implemented, tested, and committed individually
+- Progress is visible in `prd.json` (passes flags) and `progress.txt` (learnings)
+- Codebase patterns are consolidated and propagated across phases
 - Merge order is documented and informed by dependency analysis
 - Merges are safer and easier to review
 
@@ -360,12 +486,14 @@ This skill succeeds when:
 
 ## Managed files
 
-| File | Created in | Purpose |
-|---|---|---|
-| `plan.md` | Phase 1 | Full execution plan, assumptions, risks, dependency map |
-| `todo.md` | Phase 1 | Task breakdown with checkboxes, grouped by phase |
-| `execution.md` | Phase 3b | Dependency graph, parallel groups, implementation order |
-| `merge_order.md` | Phase 4 | Merge sequence, conflict expectations, validation steps |
+| File | Location | Created in | Purpose |
+|---|---|---|---|
+| `plan.md` | repo root | Phase 1 | Full execution plan, assumptions, risks, dependency map |
+| `todo.md` | repo root | Phase 1 | Task breakdown with checkboxes, grouped by phase |
+| `execution.md` | repo root | Phase 3b | Dependency graph, parallel groups, implementation order |
+| `prd.json` | each phase workspace | Phase 3b | Ralph-format user stories for that phase |
+| `progress.txt` | each phase workspace | Phase 2 | Progress log with learnings and codebase patterns |
+| `merge_order.md` | repo root | Phase 4 | Merge sequence, conflict expectations, validation steps |
 
 ---
 
