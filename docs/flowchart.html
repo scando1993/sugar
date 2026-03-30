@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orchestration Skills — Interactive Workflow Flowchart</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --text-muted: #8b949e;
+    --accent-blue: #58a6ff;
+    --accent-green: #3fb950;
+    --accent-orange: #d29922;
+    --accent-red: #f85149;
+    --accent-purple: #bc8cff;
+    --accent-cyan: #39d2c0;
+    --phase1: #58a6ff;
+    --phase2: #d29922;
+    --phase3a: #bc8cff;
+    --phase3b: #39d2c0;
+    --phase3c: #3fb950;
+    --phase4: #f85149;
+    --ralph: #f0883e;
+    --glow-blue: rgba(88, 166, 255, 0.3);
+    --glow-green: rgba(63, 185, 80, 0.3);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    padding: 48px 24px 32px;
+    position: relative;
+  }
+  .header h1 {
+    font-size: 2.4rem;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple), var(--accent-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 12px;
+  }
+  .header p {
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* Navigation Pills */
+  .nav-pills {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    padding: 16px 24px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(13, 17, 23, 0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-pill {
+    padding: 8px 18px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+  }
+  .nav-pill:hover {
+    border-color: var(--accent-blue);
+    color: var(--text);
+    transform: translateY(-1px);
+  }
+  .nav-pill.active {
+    background: var(--accent-blue);
+    border-color: var(--accent-blue);
+    color: #fff;
+  }
+  .nav-pill[data-phase="overview"] { --pill-color: var(--accent-blue); }
+  .nav-pill[data-phase="phase1"] { --pill-color: var(--phase1); }
+  .nav-pill[data-phase="phase2"] { --pill-color: var(--phase2); }
+  .nav-pill[data-phase="phase3a"] { --pill-color: var(--phase3a); }
+  .nav-pill[data-phase="phase3b"] { --pill-color: var(--phase3b); }
+  .nav-pill[data-phase="phase3c"] { --pill-color: var(--phase3c); }
+  .nav-pill[data-phase="phase4"] { --pill-color: var(--phase4); }
+  .nav-pill[data-phase="ralph"] { --pill-color: var(--ralph); }
+  .nav-pill[data-phase="concepts"] { --pill-color: var(--accent-purple); }
+  .nav-pill.active {
+    background: var(--pill-color);
+    border-color: var(--pill-color);
+  }
+  .nav-pill:hover {
+    border-color: var(--pill-color);
+  }
+
+  /* Main content */
+  .content {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px 24px 80px;
+  }
+
+  /* Section */
+  .section {
+    display: none;
+    animation: fadeSlideIn 0.5s ease forwards;
+  }
+  .section.active {
+    display: block;
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Overview flow */
+  .overview-flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 24px 0;
+  }
+
+  .phase-block {
+    width: 100%;
+    max-width: 520px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  .phase-block.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .phase-block:hover {
+    transform: translateY(-4px) scale(1.01);
+    border-color: var(--block-color);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3), 0 0 0 1px var(--block-color);
+  }
+  .phase-block .phase-tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 10px;
+    color: #fff;
+    background: var(--block-color);
+  }
+  .phase-block h3 {
+    font-size: 1.2rem;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+  .phase-block p {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+  .phase-block .artifacts {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 12px;
+  }
+  .artifact-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 0.72rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  /* Connector arrows */
+  .connector {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 60px;
+    position: relative;
+  }
+  .connector-line {
+    width: 2px;
+    flex: 1;
+    background: linear-gradient(to bottom, var(--border), var(--accent-blue), var(--border));
+    position: relative;
+  }
+  .connector-line::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid var(--accent-blue);
+  }
+
+  /* Approval gate */
+  .approval-gate {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    background: rgba(210, 153, 34, 0.1);
+    border: 1px dashed var(--accent-orange);
+    border-radius: 24px;
+    font-size: 0.82rem;
+    color: var(--accent-orange);
+    font-weight: 500;
+    animation: gatePulse 2.5s ease-in-out infinite;
+    cursor: default;
+  }
+  @keyframes gatePulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(210, 153, 34, 0.2); }
+    50% { box-shadow: 0 0 20px 4px rgba(210, 153, 34, 0.15); }
+  }
+  .gate-icon {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--accent-orange);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+  }
+
+  /* Detail sections */
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 32px;
+  }
+  .detail-header .phase-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .detail-header h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+  }
+  .detail-header .subtitle {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  /* Step cards */
+  .steps-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+  }
+  .steps-container::before {
+    content: '';
+    position: absolute;
+    left: 28px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .step-card {
+    display: flex;
+    gap: 20px;
+    padding: 20px 0;
+    position: relative;
+    opacity: 0;
+    transform: translateX(-20px);
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .step-card.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .step-number {
+    width: 56px;
+    height: 56px;
+    min-width: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #fff;
+    z-index: 2;
+    border: 3px solid var(--bg);
+    transition: transform 0.3s, box-shadow 0.3s;
+  }
+  .step-card:hover .step-number {
+    transform: scale(1.1);
+  }
+  .step-body {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .step-card:hover .step-body {
+    border-color: var(--step-color, var(--accent-blue));
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+  .step-body h4 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .step-body p {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+  .step-body ul {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    line-height: 1.7;
+    padding-left: 20px;
+    margin-top: 8px;
+  }
+  .step-body li {
+    margin-bottom: 4px;
+  }
+  .step-body code {
+    background: rgba(255,255,255,0.06);
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--accent-cyan);
+  }
+
+  /* Decision diamond */
+  .decision-block {
+    background: var(--surface);
+    border: 1px solid var(--accent-orange);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 16px 0 16px 76px;
+    position: relative;
+    opacity: 0;
+    transform: translateX(-20px);
+    transition: all 0.5s ease;
+  }
+  .decision-block.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .decision-block::before {
+    content: '?';
+    position: absolute;
+    left: -48px;
+    top: 50%;
+    transform: translateY(-50%) rotate(45deg);
+    width: 32px;
+    height: 32px;
+    background: var(--accent-orange);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: #fff;
+    font-size: 0.9rem;
+    z-index: 2;
+    border-radius: 4px;
+    border: 3px solid var(--bg);
+  }
+  .decision-block h4 {
+    color: var(--accent-orange);
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+  }
+  .decision-paths {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .decision-path {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+  .decision-path.yes {
+    background: rgba(63, 185, 80, 0.08);
+    border: 1px solid rgba(63, 185, 80, 0.3);
+    color: var(--accent-green);
+  }
+  .decision-path.no {
+    background: rgba(248, 81, 73, 0.08);
+    border: 1px solid rgba(248, 81, 73, 0.3);
+    color: var(--accent-red);
+  }
+
+  /* Ralph loop diagram */
+  .ralph-loop-visual {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    margin: 24px 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .ralph-loop-visual::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--ralph), var(--accent-green), var(--ralph));
+  }
+
+  .loop-node {
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-weight: 500;
+    text-align: center;
+    width: 100%;
+    max-width: 400px;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  .loop-node.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+  .loop-node:hover {
+    transform: scale(1.03);
+  }
+  .loop-node.start { background: rgba(88, 166, 255, 0.12); border: 1px solid var(--accent-blue); color: var(--accent-blue); }
+  .loop-node.action { background: rgba(63, 185, 80, 0.08); border: 1px solid rgba(63, 185, 80, 0.4); color: var(--accent-green); }
+  .loop-node.check { background: rgba(210, 153, 34, 0.08); border: 1px solid rgba(210, 153, 34, 0.4); color: var(--accent-orange); }
+  .loop-node.fail { background: rgba(248, 81, 73, 0.08); border: 1px solid rgba(248, 81, 73, 0.4); color: var(--accent-red); }
+  .loop-node.complete { background: rgba(188, 140, 255, 0.1); border: 1px solid rgba(188, 140, 255, 0.4); color: var(--accent-purple); }
+  .loop-node.file { background: rgba(57, 210, 192, 0.08); border: 1px solid rgba(57, 210, 192, 0.4); color: var(--accent-cyan); }
+
+  .loop-arrow {
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 1.2rem;
+  }
+
+  .loop-branch {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+    max-width: 500px;
+    justify-content: center;
+  }
+  .loop-branch-item {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    text-align: center;
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.3s ease;
+  }
+  .loop-branch-item.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Concept cards */
+  .concepts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 20px;
+    padding: 8px 0;
+  }
+  .concept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    transition: all 0.35s ease;
+    opacity: 0;
+    transform: translateY(20px);
+    cursor: default;
+  }
+  .concept-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .concept-card:hover {
+    border-color: var(--card-color, var(--accent-blue));
+    box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+    transform: translateY(-3px);
+  }
+  .concept-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 14px;
+  }
+  .concept-card h4 {
+    font-size: 1rem;
+    margin-bottom: 8px;
+  }
+  .concept-card p {
+    color: var(--text-muted);
+    font-size: 0.86rem;
+    line-height: 1.6;
+  }
+
+  /* Parallel diagram */
+  .parallel-diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    margin: 24px 0;
+  }
+  .parallel-diagram h4 {
+    text-align: center;
+    margin-bottom: 24px;
+    color: var(--accent-purple);
+    font-size: 1rem;
+  }
+  .parallel-group {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    align-items: stretch;
+  }
+  .parallel-group-label {
+    writing-mode: vertical-lr;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+  }
+  .parallel-lanes {
+    flex: 1;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .parallel-lane {
+    flex: 1;
+    min-width: 140px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 0.82rem;
+    font-weight: 500;
+    opacity: 0;
+    transform: translateX(-20px);
+    transition: all 0.5s ease;
+  }
+  .parallel-lane.visible {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .sync-bar {
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--accent-orange), transparent);
+    margin: 12px 0;
+    border-radius: 2px;
+    position: relative;
+  }
+  .sync-bar::after {
+    content: 'sync + propagate patterns';
+    position: absolute;
+    right: 0;
+    top: -8px;
+    font-size: 0.68rem;
+    color: var(--accent-orange);
+    white-space: nowrap;
+  }
+
+  /* File table */
+  .file-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.85rem;
+  }
+  .file-table th {
+    padding: 10px 14px;
+    text-align: left;
+    color: var(--text-muted);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+  .file-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+    color: var(--text);
+  }
+  .file-table td:first-child {
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--accent-cyan);
+    font-size: 0.82rem;
+  }
+  .file-table tr:hover td {
+    background: rgba(255,255,255,0.02);
+  }
+
+  /* Animated pulse on the "running" indicator */
+  .running-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    margin-right: 6px;
+    animation: runPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes runPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.7); }
+  }
+
+  /* Loop-back arrow */
+  .loop-back {
+    position: relative;
+    margin: 8px 0;
+    padding: 6px 32px;
+    text-align: center;
+  }
+  .loop-back-arrow {
+    position: absolute;
+    right: -40px;
+    top: -180px;
+    width: 60px;
+    height: 200px;
+    border: 2px solid var(--accent-orange);
+    border-left: none;
+    border-radius: 0 20px 20px 0;
+  }
+  .loop-back-arrow::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: -6px;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-right: 8px solid var(--accent-orange);
+    transform: rotate(180deg);
+  }
+  .loop-back-label {
+    font-size: 0.72rem;
+    color: var(--accent-orange);
+    background: var(--surface);
+    padding: 2px 8px;
+    border-radius: 4px;
+    position: absolute;
+    right: -74px;
+    top: 50%;
+    transform: translateY(-50%) rotate(90deg);
+    white-space: nowrap;
+  }
+
+  /* Info box */
+  .info-box {
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin: 16px 0;
+    font-size: 0.88rem;
+    line-height: 1.6;
+  }
+  .info-box.tip {
+    background: rgba(88, 166, 255, 0.08);
+    border: 1px solid rgba(88, 166, 255, 0.25);
+    color: var(--accent-blue);
+  }
+  .info-box.warn {
+    background: rgba(210, 153, 34, 0.08);
+    border: 1px solid rgba(210, 153, 34, 0.25);
+    color: var(--accent-orange);
+  }
+  .info-box.success {
+    background: rgba(63, 185, 80, 0.08);
+    border: 1px solid rgba(63, 185, 80, 0.25);
+    color: var(--accent-green);
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .header h1 { font-size: 1.6rem; }
+    .nav-pills { gap: 6px; padding: 12px 16px; }
+    .nav-pill { padding: 6px 12px; font-size: 0.78rem; }
+    .phase-block { padding: 20px; }
+    .concepts-grid { grid-template-columns: 1fr; }
+    .step-card { gap: 12px; }
+    .step-number { width: 44px; height: 44px; min-width: 44px; font-size: 0.9rem; }
+    .steps-container::before { left: 22px; }
+    .decision-block { margin-left: 56px; }
+    .decision-block::before { left: -38px; width: 26px; height: 26px; }
+    .parallel-lanes { flex-direction: column; }
+  }
+
+  /* Animated particle trail (decorative) */
+  .particle-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+</style>
+</head>
+<body>
+
+<canvas class="particle-canvas" id="particles"></canvas>
+
+<div class="header">
+  <h1>Phased Software Engineering Execution</h1>
+  <p>Interactive workflow guide — click any phase to explore its steps, decisions, and artifacts</p>
+</div>
+
+<nav class="nav-pills" id="nav">
+  <button class="nav-pill active" data-phase="overview">Overview</button>
+  <button class="nav-pill" data-phase="phase1">Phase 1 — Planning</button>
+  <button class="nav-pill" data-phase="phase2">Phase 2 — Workspace</button>
+  <button class="nav-pill" data-phase="phase3a">Phase 3a — Deps</button>
+  <button class="nav-pill" data-phase="phase3b">Phase 3b — PRDs</button>
+  <button class="nav-pill" data-phase="phase3c">Phase 3c — Execute</button>
+  <button class="nav-pill" data-phase="phase4">Phase 4 — Merge</button>
+  <button class="nav-pill" data-phase="ralph">Ralph Loop</button>
+  <button class="nav-pill" data-phase="concepts">Concepts</button>
+</nav>
+
+<div class="content">
+
+<!-- ========================= OVERVIEW ========================= -->
+<div class="section active" id="section-overview">
+
+  <div class="overview-flow" id="overview-flow">
+
+    <!-- Phase 1 -->
+    <div class="phase-block" style="--block-color: var(--phase1);" data-goto="phase1">
+      <span class="phase-tag" style="background: var(--phase1);">Phase 1</span>
+      <h3>Planning</h3>
+      <p>Analyze the task. Produce a complete execution plan and task breakdown without writing any code.</p>
+      <div class="artifacts">
+        <span class="artifact-badge">plan.md</span>
+        <span class="artifact-badge">todo.md</span>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+    <div class="approval-gate"><span class="gate-icon">!</span> User Approval Required</div>
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- Phase 2 -->
+    <div class="phase-block" style="--block-color: var(--phase2);" data-goto="phase2">
+      <span class="phase-tag" style="background: var(--phase2);">Phase 2</span>
+      <h3>Workspace Setup</h3>
+      <p>Create isolated git worktrees and branches for each execution phase. Initialize progress tracking.</p>
+      <div class="artifacts">
+        <span class="artifact-badge">git worktrees</span>
+        <span class="artifact-badge">progress.txt</span>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+    <div class="approval-gate"><span class="gate-icon">!</span> User Approval Required</div>
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- Phase 3a -->
+    <div class="phase-block" style="--block-color: var(--phase3a);" data-goto="phase3a">
+      <span class="phase-tag" style="background: var(--phase3a);">Phase 3a</span>
+      <h3>Dependency Analysis</h3>
+      <p>Map what each phase produces, consumes, and depends on. Build the dependency graph and identify parallel groups.</p>
+      <div class="artifacts">
+        <span class="artifact-badge">dependency graph</span>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- Phase 3b -->
+    <div class="phase-block" style="--block-color: var(--phase3b);" data-goto="phase3b">
+      <span class="phase-tag" style="background: var(--phase3b);">Phase 3b</span>
+      <h3>PRD Generation</h3>
+      <p>Create execution plan, generate Ralph-format <code>prd.json</code> with user stories, agent instructions, and loop scripts per phase.</p>
+      <div class="artifacts">
+        <span class="artifact-badge">execution.md</span>
+        <span class="artifact-badge">prd.json</span>
+        <span class="artifact-badge">CLAUDE.md</span>
+        <span class="artifact-badge">ralph-loop.sh</span>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- Phase 3c -->
+    <div class="phase-block" style="--block-color: var(--phase3c);" data-goto="phase3c">
+      <span class="phase-tag" style="background: var(--phase3c);">Phase 3c</span>
+      <h3>Parallel Execution</h3>
+      <p>Launch Ralph iteration loops for all independent phases in parallel. Each loop: one story per agent, fresh context, atomic commits.</p>
+      <div class="artifacts">
+        <span class="artifact-badge"><span class="running-dot"></span>ralph-loop.sh</span>
+        <span class="artifact-badge">committed code</span>
+      </div>
+    </div>
+
+    <div class="connector"><div class="connector-line"></div></div>
+    <div class="approval-gate"><span class="gate-icon">!</span> User Approval Required</div>
+    <div class="connector"><div class="connector-line"></div></div>
+
+    <!-- Phase 4 -->
+    <div class="phase-block" style="--block-color: var(--phase4);" data-goto="phase4">
+      <span class="phase-tag" style="background: var(--phase4);">Phase 4</span>
+      <h3>Merge</h3>
+      <p>Create merge order based on dependency graph. Merge all phase branches with validation after each step.</p>
+      <div class="artifacts">
+        <span class="artifact-badge">merge_order.md</span>
+        <span class="artifact-badge">merged code</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="info-box tip">
+    <strong>Click any phase</strong> to see its detailed step-by-step flow, decision points, and artifacts.
+  </div>
+
+  <!-- Managed files -->
+  <h3 style="margin: 32px 0 16px; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em;">Managed Files</h3>
+  <table class="file-table">
+    <thead>
+      <tr><th>File</th><th>Location</th><th>Created in</th><th>Purpose</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>plan.md</td><td>repo root</td><td>Phase 1</td><td>Execution plan, dependency map, risks</td></tr>
+      <tr><td>todo.md</td><td>repo root</td><td>Phase 1</td><td>Task breakdown with checkboxes</td></tr>
+      <tr><td>execution.md</td><td>repo root</td><td>Phase 3b</td><td>Dependency graph, parallel groups, execution order</td></tr>
+      <tr><td>prd.json</td><td>each phase workspace</td><td>Phase 3b</td><td>Ralph-format user stories (state machine)</td></tr>
+      <tr><td>progress.txt</td><td>each phase workspace</td><td>Phase 2</td><td>Progress log + codebase patterns</td></tr>
+      <tr><td>CLAUDE.md</td><td>each phase workspace</td><td>Phase 3b</td><td>Ralph agent instructions</td></tr>
+      <tr><td>ralph-loop.sh</td><td>each phase workspace</td><td>Phase 3b</td><td>Iteration loop (spawns fresh agents per story)</td></tr>
+      <tr><td>merge_order.md</td><td>repo root</td><td>Phase 4</td><td>Merge sequence and conflict expectations</td></tr>
+    </tbody>
+  </table>
+</div>
+
+
+<!-- ========================= PHASE 1 ========================= -->
+<div class="section" id="section-phase1">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--phase1);">1</div>
+    <div>
+      <h2>Phase 1 — Planning</h2>
+      <div class="subtitle">Analyze the task and produce a complete execution plan. No code.</div>
+    </div>
+  </div>
+
+  <div class="steps-container" style="--step-color: var(--phase1);">
+
+    <div class="step-card" data-delay="0">
+      <div class="step-number" style="background: var(--phase1);">1</div>
+      <div class="step-body">
+        <h4>Receive &amp; Analyze Task</h4>
+        <p>Read the user's <code>$ARGUMENTS</code>. Identify scope, complexity, and potential dependencies. Ask clarifying questions if the task is ambiguous.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="100">
+      <div class="step-number" style="background: var(--phase1);">2</div>
+      <div class="step-body">
+        <h4>Create <code>plan.md</code></h4>
+        <p>Write a comprehensive execution plan at the repo root containing:</p>
+        <ul>
+          <li><strong>Objective</strong> — clear, measurable goal</li>
+          <li><strong>Scope</strong> — what's included and excluded</li>
+          <li><strong>Assumptions &amp; Constraints</strong></li>
+          <li><strong>Risks</strong> — potential failure points</li>
+          <li><strong>Dependency map</strong> — which parts depend on others</li>
+          <li><strong>Architecture strategy</strong></li>
+          <li><strong>Execution phases</strong> with dependency annotations</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="200">
+      <div class="step-number" style="background: var(--phase1);">3</div>
+      <div class="step-body">
+        <h4>Create <code>todo.md</code></h4>
+        <p>Break the plan into small, actionable, idempotent tasks grouped by phase. Each task gets a checkbox (<code>- [ ]</code>), dependency annotations, and completion criteria.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="300">
+      <div class="step-number" style="background: var(--phase1);">4</div>
+      <div class="step-body">
+        <h4>Stop &amp; Await Approval</h4>
+        <p>Present plan.md and todo.md to the user. <strong>Do not proceed</strong> until explicitly approved. No code, no branches, no implementation.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-block" data-delay="400">
+    <h4>Decision: User Approval</h4>
+    <div class="decision-paths">
+      <div class="decision-path yes"><strong>Approved</strong> — Proceed to Phase 2: Workspace Setup</div>
+      <div class="decision-path no"><strong>Rejected</strong> — Revise plan.md and todo.md based on feedback</div>
+    </div>
+  </div>
+
+  <div class="info-box warn">
+    <strong>Prompt repetition:</strong> "The original task is: <em>$ARGUMENTS</em>. This phase produces plan.md and todo.md only."
+  </div>
+</div>
+
+
+<!-- ========================= PHASE 2 ========================= -->
+<div class="section" id="section-phase2">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--phase2);">2</div>
+    <div>
+      <h2>Phase 2 — Workspace Setup</h2>
+      <div class="subtitle">Create isolated git worktrees and branches for each execution phase.</div>
+    </div>
+  </div>
+
+  <div class="steps-container" style="--step-color: var(--phase2);">
+
+    <div class="step-card" data-delay="0">
+      <div class="step-number" style="background: var(--phase2);">1</div>
+      <div class="step-body">
+        <h4>Create Phase Directories</h4>
+        <p>Create the base directory at <code>/tmp/&lt;repo&gt;-phases/</code> to hold all phase workspaces.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="100">
+      <div class="step-number" style="background: var(--phase2);">2</div>
+      <div class="step-body">
+        <h4>Create Git Worktrees</h4>
+        <p>For each phase in <code>plan.md</code>, run <code>git worktree add</code> with a new branch:</p>
+        <ul>
+          <li><code>phase-a-types/</code> on branch <code>phase-a-types</code></li>
+          <li><code>phase-b-api/</code> on branch <code>phase-b-api</code></li>
+          <li><code>phase-c-ui/</code> on branch <code>phase-c-ui</code></li>
+        </ul>
+        <p>Each workspace is a full copy of the repo with its own branch. Changes don't cross-contaminate.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="200">
+      <div class="step-number" style="background: var(--phase2);">3</div>
+      <div class="step-body">
+        <h4>Initialize <code>progress.txt</code></h4>
+        <p>Create a progress log in each workspace with a header and timestamp. This file will accumulate learnings and codebase patterns during implementation.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="300">
+      <div class="step-number" style="background: var(--phase2);">4</div>
+      <div class="step-body">
+        <h4>Stop &amp; Await Approval</h4>
+        <p>Confirm all worktrees and branches are set up correctly. Document any setup issues in plan.md.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-block" data-delay="400">
+    <h4>Decision: User Approval</h4>
+    <div class="decision-paths">
+      <div class="decision-path yes"><strong>Approved</strong> — Proceed to Phase 3a: Dependency Analysis</div>
+      <div class="decision-path no"><strong>Rejected</strong> — Fix workspace issues, re-verify setup</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ========================= PHASE 3a ========================= -->
+<div class="section" id="section-phase3a">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--phase3a);">3a</div>
+    <div>
+      <h2>Phase 3a — Dependency Analysis</h2>
+      <div class="subtitle">Map what each phase produces, consumes, and depends on.</div>
+    </div>
+  </div>
+
+  <div class="steps-container" style="--step-color: var(--phase3a);">
+
+    <div class="step-card" data-delay="0">
+      <div class="step-number" style="background: var(--phase3a);">1</div>
+      <div class="step-body">
+        <h4>Read <code>plan.md</code></h4>
+        <p>Thoroughly review the execution plan to understand each phase's scope and intended outputs.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="100">
+      <div class="step-number" style="background: var(--phase3a);">2</div>
+      <div class="step-body">
+        <h4>Map Phase Relationships</h4>
+        <p>For each phase, determine:</p>
+        <ul>
+          <li><strong>Produces</strong> — artifacts, files, APIs, types, schema</li>
+          <li><strong>Consumes</strong> — what it needs from other phases</li>
+          <li><strong>Hard deps</strong> — must complete before this starts</li>
+          <li><strong>Soft deps</strong> — helpful but not blocking</li>
+          <li><strong>Shared files</strong> — cross-phase modifications</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="200">
+      <div class="step-number" style="background: var(--phase3a);">3</div>
+      <div class="step-body">
+        <h4>Build Dependency Graph</h4>
+        <p>Map all produces/consumes relationships. Check for circular dependencies (halt if found). Identify the <strong>critical path</strong> — the longest sequential chain that determines minimum total time.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="300">
+      <div class="step-number" style="background: var(--phase3a);">4</div>
+      <div class="step-body">
+        <h4>Identify Execution Groups</h4>
+        <ul>
+          <li><strong>Group 1</strong> — phases with zero dependencies (run first, in parallel)</li>
+          <li><strong>Group 2</strong> — phases that depend only on Group 1</li>
+          <li><strong>Sequential chains</strong> — linear dependencies that must run in order</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-block" data-delay="400">
+    <h4>Decision: Circular Dependency?</h4>
+    <div class="decision-paths">
+      <div class="decision-path yes"><strong>No cycles</strong> — Proceed to Phase 3b: PRD Generation</div>
+      <div class="decision-path no"><strong>Cycle found</strong> — Halt. Requires manual resolution before continuing</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ========================= PHASE 3b ========================= -->
+<div class="section" id="section-phase3b">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--phase3b);">3b</div>
+    <div>
+      <h2>Phase 3b — PRD Generation</h2>
+      <div class="subtitle">Create execution documentation and Ralph workspace files for every phase.</div>
+    </div>
+  </div>
+
+  <div class="steps-container" style="--step-color: var(--phase3b);">
+
+    <div class="step-card" data-delay="0">
+      <div class="step-number" style="background: var(--phase3b);">1</div>
+      <div class="step-body">
+        <h4>Create <code>execution.md</code></h4>
+        <p>Write the execution plan at repo root with:</p>
+        <ul>
+          <li>ASCII dependency graph</li>
+          <li>Parallel execution groups (numbered)</li>
+          <li>Execution order with satisfied dependencies</li>
+          <li>Critical path analysis</li>
+          <li>Risk assessment (conflict likelihood, shared files)</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="100">
+      <div class="step-number" style="background: var(--phase3b);">2</div>
+      <div class="step-body">
+        <h4>Generate <code>prd.json</code> per Phase</h4>
+        <p>Convert each phase's tasks into Ralph-format user stories. Each story must be:</p>
+        <ul>
+          <li>Completable in <strong>one agent pass</strong></li>
+          <li>Describable in 2-3 sentences</li>
+          <li>Ordered by internal dependency</li>
+          <li>Include "Typecheck passes" as final criterion</li>
+          <li>All start with <code>passes: false</code></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="200">
+      <div class="step-number" style="background: var(--phase3b);">3</div>
+      <div class="step-body">
+        <h4>Generate <code>CLAUDE.md</code> per Phase</h4>
+        <p>Agent instructions for each workspace. Contains the full Ralph protocol: read prd.json, pick story, implement, quality check, commit, update state, stop. Includes <strong>prompt repetition</strong> — task restated at top and bottom.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="300">
+      <div class="step-number" style="background: var(--phase3b);">4</div>
+      <div class="step-body">
+        <h4>Generate <code>ralph-loop.sh</code> per Phase</h4>
+        <p>The iteration engine. A bash loop that spawns fresh agent instances — one per story. Detects <code>PHASE_COMPLETE</code> to exit. Made executable with <code>chmod +x</code>.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-box success">
+    <strong>After this step:</strong> Each phase workspace has exactly 4 files — <code>prd.json</code>, <code>progress.txt</code>, <code>CLAUDE.md</code>, <code>ralph-loop.sh</code> — ready for autonomous execution.
+  </div>
+</div>
+
+
+<!-- ========================= PHASE 3c ========================= -->
+<div class="section" id="section-phase3c">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--phase3c);">3c</div>
+    <div>
+      <h2>Phase 3c — Parallel Execution</h2>
+      <div class="subtitle">Launch Ralph loops for all independent phases simultaneously.</div>
+    </div>
+  </div>
+
+  <div class="parallel-diagram">
+    <h4>Parallel Execution Model</h4>
+
+    <div class="parallel-group">
+      <div class="parallel-group-label" style="background: var(--phase3c);">Group 1</div>
+      <div class="parallel-lanes">
+        <div class="parallel-lane" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
+          <span class="running-dot"></span> phase-a-types<br><small>ralph-loop.sh</small>
+        </div>
+        <div class="parallel-lane" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
+          <span class="running-dot"></span> phase-b-api<br><small>ralph-loop.sh</small>
+        </div>
+        <div class="parallel-lane" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
+          <span class="running-dot"></span> phase-c-ui<br><small>ralph-loop.sh</small>
+        </div>
+      </div>
+    </div>
+
+    <div class="sync-bar"></div>
+
+    <div class="parallel-group">
+      <div class="parallel-group-label" style="background: var(--accent-purple);">Group 2</div>
+      <div class="parallel-lanes">
+        <div class="parallel-lane" style="background: rgba(188,140,255,0.08); border: 1px solid rgba(188,140,255,0.3); color: var(--accent-purple);">
+          <span class="running-dot"></span> phase-d-integration<br><small>ralph-loop.sh (with patterns from G1)</small>
+        </div>
+        <div class="parallel-lane" style="background: rgba(188,140,255,0.08); border: 1px solid rgba(188,140,255,0.3); color: var(--accent-purple);">
+          <span class="running-dot"></span> phase-e-tests<br><small>ralph-loop.sh (with patterns from G1)</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="steps-container" style="--step-color: var(--phase3c);">
+
+    <div class="step-card" data-delay="0">
+      <div class="step-number" style="background: var(--phase3c);">1</div>
+      <div class="step-body">
+        <h4>Launch Group 1 (No Dependencies)</h4>
+        <p>All phases with zero dependencies launch their <code>ralph-loop.sh</code> scripts simultaneously in background processes. Each loop runs independently.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="100">
+      <div class="step-number" style="background: var(--phase3c);">2</div>
+      <div class="step-body">
+        <h4>Wait for Group Completion</h4>
+        <p>Wait for all Group 1 processes to exit. Check exit codes — <code>0</code> means all stories passed, non-zero means max iterations reached or error.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="200">
+      <div class="step-number" style="background: var(--phase3c);">3</div>
+      <div class="step-body">
+        <h4>Propagate Codebase Patterns</h4>
+        <p>Collect <strong>Codebase Patterns</strong> sections from all completed phases' <code>progress.txt</code> files. Inject these learnings into the next group's <code>CLAUDE.md</code> context.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="300">
+      <div class="step-number" style="background: var(--phase3c);">4</div>
+      <div class="step-body">
+        <h4>Launch Next Group</h4>
+        <p>Start Group 2 phases (which depend on Group 1). Repeat pattern: launch in parallel, wait, propagate patterns. Continue until all groups complete.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="400">
+      <div class="step-number" style="background: var(--phase3c);">5</div>
+      <div class="step-body">
+        <h4>Push All Branches</h4>
+        <p>Each phase pushes its branch to origin upon completion. Update <code>todo.md</code> checkboxes and <code>execution.md</code> with actual results.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-block" data-delay="500">
+    <h4>Decision: All Stories Passing?</h4>
+    <div class="decision-paths">
+      <div class="decision-path yes"><strong>All pass</strong> — Proceed to Phase 4: Merge</div>
+      <div class="decision-path no"><strong>Some blocked</strong> — Check <code>prd.json</code> notes, fix blockers, resume <code>ralph-loop.sh</code></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ========================= PHASE 4 ========================= -->
+<div class="section" id="section-phase4">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--phase4);">4</div>
+    <div>
+      <h2>Phase 4 — Merge</h2>
+      <div class="subtitle">Safely integrate all completed phase branches in dependency order.</div>
+    </div>
+  </div>
+
+  <div class="steps-container" style="--step-color: var(--phase4);">
+
+    <div class="step-card" data-delay="0">
+      <div class="step-number" style="background: var(--phase4);">1</div>
+      <div class="step-body">
+        <h4>Create <code>merge_order.md</code></h4>
+        <p>Document the recommended merge sequence, informed by the dependency graph:</p>
+        <ul>
+          <li>Merge order (foundations first)</li>
+          <li>Rationale for ordering</li>
+          <li>Expected conflict areas</li>
+          <li>Conflict resolution strategies</li>
+          <li>Validation steps after each merge</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="100">
+      <div class="step-number" style="background: var(--phase4);">2</div>
+      <div class="step-body">
+        <h4>Merge in Order</h4>
+        <p>Merge each phase branch into main in the documented order. Foundation phases first, dependent phases after. One merge per commit.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="200">
+      <div class="step-number" style="background: var(--phase4);">3</div>
+      <div class="step-body">
+        <h4>Validate After Each Merge</h4>
+        <p>Run full quality checks after each merge: typecheck, lint, tests. If any fail, fix before proceeding to next merge. Document actual conflicts in <code>merge_order.md</code>.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="300">
+      <div class="step-number" style="background: var(--phase4);">4</div>
+      <div class="step-body">
+        <h4>Final Validation</h4>
+        <p>Run the complete test suite on the fully merged result. Phase 4 is <strong>not complete</strong> until all checks pass on the final merged code.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="decision-block" data-delay="400">
+    <h4>Decision: Final Validation</h4>
+    <div class="decision-paths">
+      <div class="decision-path yes"><strong>All pass</strong> — Workflow complete. All phases merged and validated.</div>
+      <div class="decision-path no"><strong>Failures</strong> — Fix issues, update merge_order.md, revalidate</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ========================= RALPH LOOP ========================= -->
+<div class="section" id="section-ralph">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--ralph);">R</div>
+    <div>
+      <h2>The Ralph Loop</h2>
+      <div class="subtitle">One story per agent, fresh context each iteration, memory via files.</div>
+    </div>
+  </div>
+
+  <div class="info-box tip">
+    The Ralph pattern is the core execution engine. Each phase workspace runs this loop independently. A bash script (<code>ralph-loop.sh</code>) spawns fresh agent instances — one per story — preventing context exhaustion.
+  </div>
+
+  <div class="ralph-loop-visual" id="ralph-visual">
+
+    <div class="loop-node start">ralph-loop.sh starts (max N iterations)</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node file">Agent reads prd.json + progress.txt (Codebase Patterns first)</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node check">Pick highest priority story where passes: false</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-branch">
+      <div class="loop-branch-item" style="background: rgba(188,140,255,0.08); border: 1px solid rgba(188,140,255,0.3); color: var(--accent-purple);">
+        None found?<br><strong>PHASE_COMPLETE</strong><br>Push &amp; exit
+      </div>
+      <div class="loop-branch-item" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
+        Story found?<br><strong>Implement it</strong><br>&darr;
+      </div>
+    </div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node action">Implement the single user story</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node check">Run quality checks (typecheck, lint, tests)</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-branch">
+      <div class="loop-branch-item" style="background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); color: var(--accent-red);">
+        Fail?<br><strong>Retry (up to 3x)</strong><br>If stuck: record blocker,<br>reset, move to next
+      </div>
+      <div class="loop-branch-item" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
+        Pass?<br><strong>Commit</strong><br><code>feat: US-001 - Title</code>
+      </div>
+    </div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node action">Set passes: true in prd.json</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node file">Append learnings to progress.txt</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node complete">Agent exits. Loop spawns fresh iteration.</div>
+
+  </div>
+
+  <h3 style="margin: 32px 0 16px; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em;">Memory Persistence (across iterations)</h3>
+
+  <div class="concepts-grid">
+    <div class="concept-card" style="--card-color: var(--accent-cyan);">
+      <div class="concept-icon" style="background: rgba(57,210,192,0.15); color: var(--accent-cyan);">{ }</div>
+      <h4>prd.json</h4>
+      <p>State machine. Which stories are done (<code>passes: true</code>), which are blocked (<code>notes</code> field). Each new agent reads this to find its work.</p>
+    </div>
+    <div class="concept-card" style="--card-color: var(--accent-green);">
+      <div class="concept-icon" style="background: rgba(63,185,80,0.15); color: var(--accent-green);">&#x1d4ab;</div>
+      <h4>progress.txt</h4>
+      <p>Learnings, patterns, and gotchas. The Codebase Patterns section at the top is read first — ensuring each new agent benefits from prior discoveries.</p>
+    </div>
+    <div class="concept-card" style="--card-color: var(--accent-purple);">
+      <div class="concept-icon" style="background: rgba(188,140,255,0.15); color: var(--accent-purple);">&#x2325;</div>
+      <h4>git history</h4>
+      <p>Every completed story is an atomic commit. Code persists across iterations via the branch. The new agent starts from where the last one left off.</p>
+    </div>
+  </div>
+
+  <div class="info-box warn">
+    <strong>Error recovery:</strong> If quality checks fail 3 times, the agent records the blocker in <code>prd.json</code> notes, resets unstaged changes with <code>git checkout -- .</code>, and moves to the next story. No story is left in a broken state.
+  </div>
+</div>
+
+
+<!-- ========================= CONCEPTS ========================= -->
+<div class="section" id="section-concepts">
+  <div class="detail-header">
+    <div class="phase-icon" style="background: var(--accent-purple);">&#x2726;</div>
+    <div>
+      <h2>Critical Concepts</h2>
+      <div class="subtitle">The principles and patterns that make the workflow reliable at scale.</div>
+    </div>
+  </div>
+
+  <div class="concepts-grid" id="concepts-grid">
+
+    <div class="concept-card" style="--card-color: var(--phase1);">
+      <div class="concept-icon" style="background: rgba(88,166,255,0.15); color: var(--phase1);">&#x1f4d0;</div>
+      <h4>Plan Before Code</h4>
+      <p>Phase 1 always runs first. The entire execution plan, dependency map, and task breakdown are completed and approved before any code is written or branches are created.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--phase2);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--phase2);">&#x1f512;</div>
+      <h4>Isolated Workspaces</h4>
+      <p>Each phase gets its own git worktree and branch. Changes in one phase never affect another until the explicit merge in Phase 4. Enables true parallel execution.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--ralph);">
+      <div class="concept-icon" style="background: rgba(240,136,62,0.15); color: var(--ralph);">1</div>
+      <h4>One Story at a Time</h4>
+      <p>The Ralph pattern: each agent handles exactly ONE user story, then stops. Fresh context per iteration prevents context exhaustion. Small, atomic, testable increments.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-green);">
+      <div class="concept-icon" style="background: rgba(63,185,80,0.15); color: var(--accent-green);">&#x2714;</div>
+      <h4>Quality Gates</h4>
+      <p>Every commit must pass quality checks — typecheck, lint, tests. Failed checks trigger retry (up to 3x). Blocked stories are recorded, never left broken.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--phase3c);">
+      <div class="concept-icon" style="background: rgba(63,185,80,0.15); color: var(--phase3c);">&#x21c4;</div>
+      <h4>Parallel Execution</h4>
+      <p>Independent phases run simultaneously. Dependency analysis identifies which phases can safely overlap. Synchronization points between groups propagate learnings.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-orange);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x1f504;</div>
+      <h4>Prompt Repetition</h4>
+      <p>The task is restated at the start and end of every phase and every story. Ensures the model maintains full attention across long contexts and many iterations.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-cyan);">
+      <div class="concept-icon" style="background: rgba(57,210,192,0.15); color: var(--accent-cyan);">&#x1f4c8;</div>
+      <h4>Progress Tracking</h4>
+      <p>Three layers: <code>prd.json</code> flags (state machine), <code>todo.md</code> checkboxes (human view), and <code>progress.txt</code> learnings (agent memory). Full visibility at all times.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--phase3a);">
+      <div class="concept-icon" style="background: rgba(188,140,255,0.15); color: var(--phase3a);">&#x1f517;</div>
+      <h4>Dependency Mapping</h4>
+      <p>Each phase declares what it produces and consumes. Hard dependencies are blocking, soft dependencies are advisory. The critical path determines minimum execution time.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-blue);">
+      <div class="concept-icon" style="background: rgba(88,166,255,0.15); color: var(--accent-blue);">&#x1f9ec;</div>
+      <h4>Pattern Propagation</h4>
+      <p>Codebase patterns discovered in earlier phases are extracted from <code>progress.txt</code> and injected into later phases' agent context. Ensures consistency across parallel work.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-red);">
+      <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--accent-red);">&#x1f6e0;</div>
+      <h4>Error Recovery</h4>
+      <p>3-attempt retry with diagnosis. If still stuck: record blocker in <code>prd.json</code>, reset changes, move to next story. Workflow is fully resumable from any interruption.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--phase3b);">
+      <div class="concept-icon" style="background: rgba(57,210,192,0.15); color: var(--phase3b);">&#x1f4cf;</div>
+      <h4>Story Right-Sizing</h4>
+      <p>Each story must be completable in one agent pass (one context window). Describable in 2-3 sentences. If it can't, split it. Acceptance criteria must be objectively verifiable.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--phase4);">
+      <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--phase4);">&#x23ef;</div>
+      <h4>Full Resumability</h4>
+      <p>Interrupted mid-execution? Just restart. <code>prd.json</code> tracks which stories passed. <code>progress.txt</code> preserves learnings. Git preserves code. Pick up exactly where you stopped.</p>
+    </div>
+
+  </div>
+</div>
+
+</div><!-- end .content -->
+
+
+<script>
+// Navigation
+const nav = document.getElementById('nav');
+const pills = nav.querySelectorAll('.nav-pill');
+const sections = document.querySelectorAll('.section');
+
+function switchSection(phase) {
+  pills.forEach(p => p.classList.toggle('active', p.dataset.phase === phase));
+  sections.forEach(s => {
+    const isTarget = s.id === 'section-' + phase;
+    s.classList.toggle('active', isTarget);
+    if (isTarget) animateSection(s);
+  });
+}
+
+pills.forEach(pill => {
+  pill.addEventListener('click', () => switchSection(pill.dataset.phase));
+});
+
+// Phase blocks navigate to detail
+document.querySelectorAll('.phase-block[data-goto]').forEach(block => {
+  block.addEventListener('click', () => switchSection(block.dataset.goto));
+});
+
+// Animate elements on section show
+function animateSection(section) {
+  const elements = section.querySelectorAll('.step-card, .decision-block, .phase-block, .concept-card, .loop-node, .loop-branch-item, .parallel-lane');
+  elements.forEach((el, i) => {
+    el.classList.remove('visible');
+    const delay = parseInt(el.dataset.delay || 0) + i * 80;
+    setTimeout(() => el.classList.add('visible'), delay);
+  });
+}
+
+// Initial animation for overview
+setTimeout(() => animateSection(document.getElementById('section-overview')), 100);
+
+// Intersection observer for scroll animations
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.15, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.step-card, .decision-block, .phase-block, .concept-card, .loop-node, .loop-branch-item, .parallel-lane').forEach(el => {
+  observer.observe(el);
+});
+
+// Particle background
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let animFrame;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 1.5 + 0.5;
+    this.speedY = -(Math.random() * 0.3 + 0.1);
+    this.speedX = (Math.random() - 0.5) * 0.2;
+    this.opacity = Math.random() * 0.4 + 0.1;
+    this.color = ['88,166,255', '63,185,80', '188,140,255', '57,210,192'][Math.floor(Math.random() * 4)];
+  }
+  update() {
+    this.y += this.speedY;
+    this.x += this.speedX;
+    if (this.y < -10) this.reset(), this.y = canvas.height + 10;
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color}, ${this.opacity})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 60; i++) particles.push(new Particle());
+
+function animateParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  animFrame = requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// Cleanup on tab hidden
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) cancelAnimationFrame(animFrame);
+  else animateParticles();
+});
+</script>
+
+</body>
+</html>
