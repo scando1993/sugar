@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from 'react';
-import type { Node, Edge, NodeChange, EdgeChange, Connection, NodeTypes } from '@xyflow/react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import type { Node, Edge, NodeChange, EdgeChange, Connection, NodeTypes, ReactFlowInstance } from '@xyflow/react';
 import {
   ReactFlow,
   useNodesState,
@@ -13,7 +13,6 @@ import {
   addEdge,
   Handle,
   Position,
-  reconnectEdge,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import './App.css';
@@ -41,7 +40,7 @@ const phaseColors: Record<Phase, PhaseColor> = {
   analysis:   { bg: '#faf0ff', border: '#8b5cf6', tag: 'Phase 3a' },
   generation: { bg: '#f0fffe', border: '#0891b2', tag: 'Phase 3b' },
   execution:  { bg: '#f0fff4', border: '#22863a', tag: 'Phase 3c' },
-  ralph:      { bg: '#fff8f0', border: '#d97706', tag: 'Ralph Loop' },
+  ralph:      { bg: '#fff8f0', border: '#d97706', tag: 'Agent Loop' },
   error:      { bg: '#fff2f2', border: '#dc2626', tag: 'Error' },
   phase4:     { bg: '#fdf0ff', border: '#9333ea', tag: 'Phase 4' },
   done:       { bg: '#f0fff4', border: '#38a169', tag: 'Complete' },
@@ -253,11 +252,11 @@ const edgeConnections: {
 
 // ─── Build initial nodes + edges ────────────────────────────────────────────
 
-function makeNodes(visibleCount: number): Node[] {
-  const stepNodes: Node[] = allSteps.map((step, index) => {
+function makeNodes(visibleCount: number, livePositions: Record<string, { x: number; y: number }>): Node[] {
+  const stepNodes: Node[] = allSteps.map((step) => {
     const stepNum = parseInt(step.id);
     const visible = stepNum <= visibleCount;
-    const pos = positions[step.id] ?? { x: 0, y: 0 };
+    const pos = livePositions[step.id] ?? positions[step.id] ?? { x: 0, y: 0 };
     const type = step.type === 'decision' ? 'decision'
       : step.type === 'gate' ? 'gate'
       : 'custom';
@@ -278,7 +277,7 @@ function makeNodes(visibleCount: number): Node[] {
   const noteNodes: Node[] = notes.map(note => ({
     id: note.id,
     type: 'note',
-    position: note.position,
+    position: livePositions[note.id] ?? note.position,
     data: { content: note.content, color: note.color },
     style: {
       opacity: visibleCount >= note.appearsWithStep ? 1 : 0,
@@ -301,7 +300,7 @@ function makeEdges(visibleCount: number): Edge[] {
       target: conn.target,
       sourceHandle: conn.sourceHandle,
       targetHandle: conn.targetHandle,
-      label: conn.label,
+      label: visible ? conn.label : undefined,
       animated: visible && (conn.animated !== false),
       style: {
         opacity: visible ? 1 : 0,
@@ -399,20 +398,45 @@ const TOTAL_STEPS = allSteps.length;
 
 export default function App() {
   const [visibleCount, setVisibleCount] = useState(1);
-  const [nodes, setNodes, onNodesChange] = useNodesState(makeNodes(1));
-  const [edges, setEdges, onEdgesChange] = useEdgesState(makeEdges(1));
-  const reconnectEdgeRef = useRef<ReturnType<typeof reconnectEdge> | null>(null);
+  // Live positions — seeded from static layout, updated on every drag
+  const livePos = useRef<Record<string, { x: number; y: number }>>({ ...positions });
+  const rfInstance = useRef<ReactFlowInstance | null>(null);
 
+  const [nodes, setNodes] = useNodesState(makeNodes(1, livePos.current));
+  const [edges, setEdges] = useEdgesState(makeEdges(1));
+
+  // Rebuild nodes without overwriting drag-moved positions
   const updateVisible = useCallback((count: number) => {
     setVisibleCount(count);
-    setNodes(makeNodes(count));
+    setNodes(makeNodes(count, livePos.current));
     setEdges(makeEdges(count));
   }, [setNodes, setEdges]);
+
+  // Pan viewport to the newly revealed node
+  useEffect(() => {
+    const step = allSteps[visibleCount - 1];
+    if (!step || !rfInstance.current) return;
+    const pos = livePos.current[step.id] ?? positions[step.id];
+    if (!pos) return;
+    const nodeW = step.type === 'decision' ? 200 : 240;
+    const nodeH = 64;
+    setTimeout(() => {
+      rfInstance.current?.setCenter(pos.x + nodeW / 2, pos.y + nodeH / 2, {
+        zoom: 1.15,
+        duration: 500,
+      });
+    }, 50);
+  }, [visibleCount]);
 
   const handleNext = () => updateVisible(Math.min(visibleCount + 1, TOTAL_STEPS));
   const handlePrev = () => updateVisible(Math.max(visibleCount - 1, 1));
   const handleReset = () => updateVisible(1);
   const handleShowAll = () => updateVisible(TOTAL_STEPS);
+
+  // Persist drag positions into livePos so rebuilds keep them
+  const handleNodeDragStop = useCallback((_: React.MouseEvent, node: Node) => {
+    livePos.current[node.id] = { ...node.position };
+  }, []);
 
   const handleNodesChange = useCallback(
     (changes: NodeChange[]) => setNodes(ns => applyNodeChanges(changes, ns)),
@@ -434,7 +458,7 @@ export default function App() {
     { phase: 'analysis',   label: 'Phase 3a' },
     { phase: 'generation', label: 'Phase 3b' },
     { phase: 'execution',  label: 'Phase 3c' },
-    { phase: 'ralph',      label: 'Ralph Loop' },
+    { phase: 'ralph',      label: 'Agent Loop' },
     { phase: 'error',      label: 'Error Recovery' },
     { phase: 'phase4',     label: 'Phase 4' },
   ];
@@ -453,9 +477,10 @@ export default function App() {
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}
+          onNodeDragStop={handleNodeDragStop}
+          onInit={(instance) => { rfInstance.current = instance; }}
           nodeTypes={nodeTypes}
-          fitView
-          fitViewOptions={{ padding: 0.15 }}
+          defaultViewport={{ x: 180, y: 60, zoom: 1.1 }}
           minZoom={0.2}
           maxZoom={2}
           defaultEdgeOptions={{
