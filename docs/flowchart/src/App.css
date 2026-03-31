@@ -9,75 +9,180 @@
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* ── Header ─────────────────────────────────────────────── */
+
 .header {
-  text-align: center;
-  padding: 24px 20px 16px;
-  border-bottom: 1px solid #eee;
-}
-.header h1 {
-  font-size: 28px;
-  font-weight: 600;
-  color: #111;
-  margin-bottom: 6px;
-}
-.header p { font-size: 15px; color: #666; }
-
-.flow-container { flex: 1; width: 100%; }
-
-.controls {
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid #eee;
   gap: 16px;
-  padding: 18px 20px;
+  min-height: 72px;
+}
+.header-left, .header-right { flex: 1; }
+.header-right { text-align: right; }
+.header-center { text-align: center; flex: 2; }
+.header-center h1 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111;
+  margin-bottom: 3px;
+}
+.header-center p { font-size: 13px; color: #888; }
+
+.back-btn {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1.5px solid #ddd;
+  background: #fff;
+  color: #444;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.18s;
+  white-space: nowrap;
+}
+.back-btn:hover { border-color: #aaa; color: #111; background: #f7f7f7; }
+
+/* ── Flow ────────────────────────────────────────────────── */
+
+.flow-container { flex: 1; width: 100%; overflow: hidden; }
+
+/* ── Footer controls (phase detail) ─────────────────────── */
+
+.footer-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 14px 20px;
   border-top: 1px solid #eee;
   flex-wrap: wrap;
 }
-.controls button {
-  padding: 10px 24px;
-  font-size: 15px;
+
+.ctrl-btn {
+  padding: 9px 22px;
+  font-size: 14px;
   font-weight: 500;
-  border: 2px solid #222;
+  border: 1.5px solid #222;
   background: #fff;
   color: #222;
-  border-radius: 6px;
+  border-radius: 7px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.18s;
+  white-space: nowrap;
 }
-.controls button:hover:not(:disabled) { background: #222; color: #fff; }
-.controls button:disabled { opacity: 0.3; cursor: not-allowed; }
-.controls .reset-btn { border-color: #888; color: #888; }
-.controls .reset-btn:hover:not(:disabled) { background: #888; color: #fff; }
+.ctrl-btn:hover:not(:disabled) { background: #222; color: #fff; }
+.ctrl-btn:disabled { opacity: 0.28; cursor: not-allowed; }
+.ctrl-btn.secondary { border-color: #bbb; color: #777; }
+.ctrl-btn.secondary:hover:not(:disabled) { background: #888; border-color: #888; color: #fff; }
 
 .step-counter {
-  font-size: 15px;
-  color: #666;
-  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 160px;
   text-align: center;
+}
+.step-fraction {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111;
+}
+.step-label {
+  font-size: 11px;
+  color: #999;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Footer legend ───────────────────────────────────────── */
+
+.footer-legend {
+  padding: 10px 20px 12px;
+  border-top: 1px solid #eee;
 }
 
 .legend {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11.5px;
+  color: #666;
 }
-.legend-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  color: #555;
-}
+.legend-item { display: flex; align-items: center; gap: 6px; }
 .legend-dot {
   width: 12px;
   height: 12px;
   border-radius: 3px;
   border: 2px solid;
+  flex-shrink: 0;
 }
 
-/* Node styles */
+/* ── Phase card node (overview) ──────────────────────────── */
+
+.phase-card-node {
+  width: 360px;
+  border: 2px solid;
+  border-radius: 12px;
+  padding: 18px 22px 14px;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.18s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  background: #fff;
+}
+.phase-card-node:hover {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.11);
+  transform: translateY(-3px);
+}
+.pcard-num {
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.pcard-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #111;
+  line-height: 1.2;
+}
+.pcard-desc {
+  font-size: 12.5px;
+  color: #555;
+  line-height: 1.5;
+}
+.pcard-artifacts {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.pcard-chip {
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid;
+}
+.pcard-hint {
+  font-size: 11px;
+  color: #bbb;
+  text-align: right;
+  margin-top: 3px;
+}
+
+/* ── Step nodes ──────────────────────────────────────────── */
+
 .custom-node {
   width: 240px;
   min-height: 64px;
@@ -86,9 +191,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.18s;
 }
-.custom-node:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
+.custom-node:hover { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1); }
 
 .node-content {
   display: flex;
@@ -98,54 +203,51 @@
   padding: 10px 12px;
   width: 100%;
 }
+.node-phase-tag {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
 .node-label {
   font-weight: 600;
-  font-size: 13.5px;
+  font-size: 13px;
   color: #111;
   text-align: center;
   line-height: 1.3;
   margin-bottom: 3px;
 }
 .node-description {
-  font-size: 11px;
-  color: #666;
+  font-size: 10.5px;
+  color: #777;
   text-align: center;
-  line-height: 1.3;
-}
-.node-phase-tag {
-  font-size: 9.5px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  opacity: 0.65;
-  margin-bottom: 4px;
+  line-height: 1.35;
 }
 
 .decision-node {
   width: 200px;
   min-height: 64px;
-  border: 2px solid #c9a227;
-  background: #fff8e6;
+  border: 2px solid;
   border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.decision-node .node-label { color: #92600a; }
-.decision-node .node-description { color: #92600a; opacity: 0.7; }
 
 .gate-node {
   width: 220px;
-  min-height: 56px;
+  min-height: 54px;
   border: 2px dashed #c9a227;
   background: #fffbf0;
   border-radius: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
 }
-.gate-node .node-label { font-size: 13px; color: #92600a; }
+.gate-node .node-label { font-size: 12.5px; color: #92600a; }
+.gate-node .node-description { color: #92600a; opacity: 0.7; }
 
 .note-node {
   border: 2px dashed;
@@ -155,19 +257,19 @@
   font-size: 10.5px;
   line-height: 1.45;
   color: #333;
-  max-width: 320px;
+  max-width: 310px;
 }
 .note-node pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 
-/* React Flow overrides */
+/* ── React Flow overrides ────────────────────────────────── */
+
 .react-flow__handle {
   width: 8px;
   height: 8px;
-  background: #aaa;
+  background: #bbb;
   border: 2px solid #fff;
 }
-.react-flow__handle:hover { background: #555; }
+.react-flow__handle:hover { background: #666; }
 .react-flow__controls { box-shadow: none; border: 1px solid #ddd; }
 .react-flow__controls-button { border-bottom: 1px solid #ddd; }
 .react-flow__controls-button:last-child { border-bottom: none; }
-.react-flow__edge-label { font-size: 11px; font-weight: 600; }

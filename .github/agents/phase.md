@@ -135,23 +135,55 @@ Read prd.json. Pick ONE story. Implement it. Commit. Mark done. Stop. The loop h
 
 #### Generate `ralph-loop.sh` in each workspace
 
-The iteration engine — spawns fresh agent instances per story:
+The iteration engine — spawns fresh agent instances per story, with retry and backoff for transient API errors:
 
 ```bash
 #!/bin/bash
+# Ralph loop — [phase-name]
+# Usage: ./ralph-loop.sh [max_iterations]
+
 MAX_ITERATIONS=${1:-20}
+MAX_RETRIES=3       # retries per iteration on transient errors
+BASE_SLEEP=8        # seconds between successful iterations
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "Starting Ralph loop — Phase: [phase-name]"
+echo "Max iterations: $MAX_ITERATIONS"
+
+# Stagger parallel phase starts to avoid simultaneous API bursts
+JITTER=$((RANDOM % 15))
+[ "$JITTER" -gt 0 ] && echo "Stagger delay: ${JITTER}s" && sleep $JITTER
+
 for i in $(seq 1 $MAX_ITERATIONS); do
+  echo ""
   echo "=== Iteration $i of $MAX_ITERATIONS ==="
-  OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+
+  OUTPUT=""
+  RETRY_DELAY=10
+
+  for attempt in $(seq 1 $MAX_RETRIES); do
+    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1) && break
+    if echo "$OUTPUT" | grep -qiE "transient|rate.?limit|overload|503|529"; then
+      echo "Transient error (attempt $attempt/$MAX_RETRIES) — retrying in ${RETRY_DELAY}s..."
+      sleep $RETRY_DELAY
+      RETRY_DELAY=$((RETRY_DELAY * 2))   # 10s → 20s → 40s
+    else
+      break   # non-transient — don't retry
+    fi
+  done
+
+  echo "$OUTPUT"
+
   if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
-    echo "Phase complete at iteration $i!"
+    echo "Phase [phase-name] complete at iteration $i!"
     exit 0
   fi
-  sleep 2
+
+  echo "Sleeping ${BASE_SLEEP}s before next story..."
+  sleep $BASE_SLEEP
 done
-echo "Reached max iterations ($MAX_ITERATIONS)"
+
+echo "Reached max iterations ($MAX_ITERATIONS). Check prd.json for status."
 exit 1
 ```
 
@@ -177,17 +209,21 @@ Memory persists via `prd.json` (state), `progress.txt` (learnings), and git (cod
 
 #### Parallel execution
 
-Follow `execution.md` group ordering. Launch all `ralph-loop.sh` scripts in a parallel group simultaneously:
+Follow `execution.md` group ordering. Stagger launches by 5s to prevent simultaneous API bursts — the loop scripts also add random jitter internally:
 
 ```bash
 /tmp/<repo>-phases/phase-a/ralph-loop.sh 20 &
 PID_A=$!
+sleep 5
 /tmp/<repo>-phases/phase-b/ralph-loop.sh 20 &
 PID_B=$!
-wait $PID_A $PID_B
+sleep 5
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 &
+PID_C=$!
+wait $PID_A $PID_B $PID_C
 ```
 
-If `claude` CLI is not available, the user can open multiple Copilot sessions — one per workspace — each running the Ralph loop manually.
+If `claude` CLI is not available, open one Copilot session per workspace and run each Ralph loop manually — do not start all sessions at the same time.
 
 **Between groups:**
 1. Collect Codebase Patterns from completed workspaces' `progress.txt`
