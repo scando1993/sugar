@@ -237,6 +237,13 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   OUTPUT=""
   RETRY_DELAY=10
 
+  # Detect consensus mode
+  if grep -q '"consensus"' "$PRD_FILE"; then
+    CONSENSUS_MODE=1
+  else
+    CONSENSUS_MODE=0
+  fi
+
   for attempt in $(seq 1 $MAX_RETRIES); do
     OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1) && break
     if echo "$OUTPUT" | grep -qiE "transient|rate.?limit|overload|503|529"; then
@@ -249,6 +256,52 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   done
 
   echo "$OUTPUT"
+
+  # Consensus path: IMPLEMENT → VERIFY quorum → TALLY → commit or reject
+  if [ "$CONSENSUS_MODE" -eq 1 ] && echo "$OUTPUT" | grep -q "STORY_IMPLEMENTED"; then
+    STORY_ID=$(echo "$OUTPUT" | grep -oE 'STORY_IMPLEMENTED:[A-Z]+-[0-9]+' | cut -d: -f2 | head -1)
+    echo "Story $STORY_ID implemented — running verifier quorum..."
+
+    VOTE_DIR=$(mktemp -d)
+    QUORUM_SIZE=$(python3 -c "import json; d=json.load(open('$PRD_FILE')); print(d['consensus']['quorumSize'])" 2>/dev/null || echo "3")
+    for v in $(seq 1 "$QUORUM_SIZE"); do
+      VOTE=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/VERIFY.md" 2>&1) || true
+      echo "$VOTE" > "$VOTE_DIR/vote_$v.txt"
+    done
+
+    PASS_COUNT=$(grep -l "VOTE:PASS" "$VOTE_DIR"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+    FAIL_COUNT=$(grep -l "VOTE:FAIL" "$VOTE_DIR"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+    echo "Tally: $PASS_COUNT PASS, $FAIL_COUNT FAIL"
+
+    if [ "$PASS_COUNT" -gt "$FAIL_COUNT" ]; then
+      echo "Consensus: PASS — committing story $STORY_ID"
+      git add -A && git commit -m "feat: $STORY_ID - verified by consensus ($PASS_COUNT/$QUORUM_SIZE)"
+      python3 -c "
+import json
+with open('$PRD_FILE') as f: d = json.load(f)
+for s in d['userStories']:
+    if s.get('id') == '$STORY_ID':
+        s['status'] = 'passed'
+        break
+with open('$PRD_FILE', 'w') as f: json.dump(d, f, indent=2)
+"
+    else
+      FAIL_REASON=$(grep -h "VOTE:FAIL" "$VOTE_DIR"/*.txt | head -1)
+      echo "Consensus: FAIL — rejecting story $STORY_ID: $FAIL_REASON"
+      echo "[$(date)] REJECTED $STORY_ID: $FAIL_REASON" >> "$SCRIPT_DIR/rejection_log.txt"
+      git checkout -- .
+      python3 -c "
+import json
+with open('$PRD_FILE') as f: d = json.load(f)
+for s in d['userStories']:
+    if s.get('id') == '$STORY_ID':
+        s['status'] = 'rejected'
+        break
+with open('$PRD_FILE', 'w') as f: json.dump(d, f, indent=2)
+"
+    fi
+    rm -rf "$VOTE_DIR"
+  fi
 
   if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
     echo "Phase [phase-name] complete at iteration $i!"
@@ -282,6 +335,55 @@ exit 1
 ```
 
 Make executable: `chmod +x ralph-loop.sh`
+
+#### Generate `VERIFY.md` in each workspace (consensus mode only)
+
+Only generate this file when `prd.json` contains a `consensus` config.
+
+**Template for each workspace VERIFY.md:**
+
+```markdown
+# Verifier Agent — [Phase Name]
+
+## Iron Law
+`DO NOT TRUST THE IMPLEMENTER — VERIFY EVERY CLAIM AGAINST THE ACTUAL CODE`
+
+## Your Task
+
+1. Read `prd.json` — find the story with `status: "verifying"` or the story ID passed to you
+2. Read the story's acceptance criteria
+3. Read the actual code diff: `git diff HEAD~1 HEAD`
+4. For EACH acceptance criterion, verify it against the actual diff
+5. Output your vote
+
+## Vote Format
+
+If ALL criteria are met:
+```
+VOTE:PASS
+```
+
+If ANY criterion is NOT met:
+```
+VOTE:FAIL:{criterion}:{reason}
+```
+
+Example: `VOTE:FAIL:Typecheck passes:TypeScript error in src/types.ts line 42`
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "The implementation looks reasonable, VOTE:PASS" | You must verify EACH criterion against the actual diff, not the description. |
+| "The commit message says it's done, good enough" | Commit messages lie. Read the diff. |
+| "One criterion is marginal but close enough" | Close is not passing. Either it meets the criterion or it doesn't. |
+
+## Rules
+- Verify EACH acceptance criterion independently
+- VOTE:FAIL if even one criterion is not met
+- Include the specific criterion and reason in every VOTE:FAIL
+- Do NOT be lenient — the implementer will get to try again
+```
 
 ---
 
@@ -390,6 +492,7 @@ git worktree prune
 | `progress.txt` | each worktree | Phase 2 |
 | `CLAUDE.md` | each worktree | Phase 3b |
 | `ralph-loop.sh` | each worktree | Phase 3b |
+| `VERIFY.md` | each worktree | Phase 3b (consensus only) |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---
