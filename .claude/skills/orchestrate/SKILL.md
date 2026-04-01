@@ -182,8 +182,11 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
 1. Read `prd.json` in this directory
 2. Read `progress.txt` — check the Codebase Patterns section first
 3. Verify you are on branch `[branch-name]`. If not: `git checkout [branch-name]`
-4. Pick the **highest priority** user story where `passes: false`
-5. If no stories remain with `passes: false` → reply with: PHASE_COMPLETE
+4. **Legacy mode:** Pick the **highest priority** user story where `passes: false`
+   **Consensus mode:** Pick the **highest priority** user story where `status` is `"pending"` or `"rejected"`
+   - If picking a `"rejected"` story: read `rejection_log.txt` first to understand what failed
+   - After picking, set the story's `status` to `"implementing"` in prd.json
+5. If no stories remain unfinished (legacy: `passes: false`; consensus: no `pending` or `rejected`) → reply with: PHASE_COMPLETE
 6. Implement that single user story
 7. **Quality Protocol (per story):**
    1. Implement the story
@@ -192,7 +195,8 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
    4. If checks pass: verify against prd.json criteria ONE MORE TIME
    5. Only THEN commit
    6. If anything fails at steps 2-4: fix, do NOT skip
-8. If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
+8. **Legacy:** If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
+   **Consensus:** Output: `STORY_IMPLEMENTED:[Story ID]` — the loop handles the verifier quorum and commit
 9. If checks fail → fix and retry (up to 3 attempts). If stuck:
    - Set the story's `notes` field in prd.json to describe the blocker
    - Append failure to progress.txt
@@ -201,7 +205,8 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
 If you cannot complete a story after 3 attempts, output: STORY_FAILED
 This signals the loop to escalate to a more capable model on the next iteration.
 Do NOT output STORY_FAILED if you haven't genuinely attempted 3 times.
-10. Update `prd.json` to set `passes: true` for the completed story
+10. **Legacy:** Update `prd.json` to set `passes: true` for the completed story
+    **Consensus:** The loop updates `status` to `"passed"` or `"rejected"` after the quorum vote
 11. Append progress to `progress.txt` (format below)
 12. When ALL stories have `passes: true` → push: `git push origin [branch-name]`
 
@@ -289,7 +294,65 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Iteration $i of $MAX_ITERATIONS"
   echo "========================================"
 
-  OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+  # Detect consensus mode
+  if grep -q '"consensus"' "$PRD_FILE"; then
+    CONSENSUS_MODE=1
+  else
+    CONSENSUS_MODE=0
+  fi
+
+  if [ "$CONSENSUS_MODE" -eq 0 ]; then
+    # Legacy path: model-tiered loop
+    OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+  else
+    # Consensus path: IMPLEMENT → VERIFY (quorum) → TALLY → commit or reject
+    OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+
+    if echo "$OUTPUT" | grep -q "STORY_IMPLEMENTED"; then
+      STORY_ID=$(echo "$OUTPUT" | grep -oE 'STORY_IMPLEMENTED:[A-Z]+-[0-9]+' | cut -d: -f2 | head -1)
+      echo "Story $STORY_ID implemented — running verifier quorum..."
+
+      VOTE_DIR=$(mktemp -d)
+      QUORUM_SIZE=$(python3 -c "import json; d=json.load(open('$PRD_FILE')); print(d['consensus']['quorumSize'])" 2>/dev/null || echo "3")
+      for v in $(seq 1 "$QUORUM_SIZE"); do
+        VOTE=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/VERIFY.md" 2>&1) || true
+        echo "$VOTE" > "$VOTE_DIR/vote_$v.txt"
+      done
+
+      PASS_COUNT=$(grep -l "VOTE:PASS" "$VOTE_DIR"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+      FAIL_COUNT=$(grep -l "VOTE:FAIL" "$VOTE_DIR"/*.txt 2>/dev/null | wc -l | tr -d ' ')
+      echo "Tally: $PASS_COUNT PASS, $FAIL_COUNT FAIL"
+
+      if [ "$PASS_COUNT" -gt "$FAIL_COUNT" ]; then
+        echo "Consensus: PASS — committing story $STORY_ID"
+        git add -A && git commit -m "feat: $STORY_ID - verified by consensus ($PASS_COUNT/$QUORUM_SIZE)"
+        python3 -c "
+import json
+with open('$PRD_FILE') as f: d = json.load(f)
+for s in d['userStories']:
+    if s.get('id') == '$STORY_ID':
+        s['status'] = 'passed'
+        break
+with open('$PRD_FILE', 'w') as f: json.dump(d, f, indent=2)
+"
+      else
+        FAIL_REASON=\$(grep -h "VOTE:FAIL" "$VOTE_DIR"/*.txt | head -1)
+        echo "Consensus: FAIL — rejecting story $STORY_ID: \$FAIL_REASON"
+        echo "[\$(date)] REJECTED $STORY_ID: \$FAIL_REASON" >> "\$SCRIPT_DIR/rejection_log.txt"
+        git checkout -- .
+        python3 -c "
+import json
+with open('$PRD_FILE') as f: d = json.load(f)
+for s in d['userStories']:
+    if s.get('id') == '$STORY_ID':
+        s['status'] = 'rejected'
+        break
+with open('$PRD_FILE', 'w') as f: json.dump(d, f, indent=2)
+"
+      fi
+      rm -rf "\$VOTE_DIR"
+    fi
+  fi
 
   if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
     echo ""
