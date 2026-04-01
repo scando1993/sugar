@@ -285,7 +285,7 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Iteration $i of $MAX_ITERATIONS"
   echo "========================================"
 
-  OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
+  OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
 
   if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
     echo ""
@@ -293,6 +293,23 @@ for i in $(seq 1 $MAX_ITERATIONS); do
     exit 0
   fi
 
+  # Check if story failed — escalate model if needed
+  if echo "$OUTPUT" | grep -qiE "STORY_FAILED|stuck|blocked|retry.?exhausted"; then
+    CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+    echo "Failure detected ($CONSECUTIVE_FAILURES consecutive)"
+    if [ "$CONSECUTIVE_FAILURES" -ge "$ESCALATION_THRESHOLD" ] && [ "$CURRENT_MODEL" != "$ESCALATION_MODEL" ]; then
+      echo ">>> Escalating from $CURRENT_MODEL to $ESCALATION_MODEL"
+      CURRENT_MODEL="$ESCALATION_MODEL"
+    fi
+  else
+    if [ "$CURRENT_MODEL" != "$DEFAULT_MODEL" ]; then
+      echo ">>> De-escalating back to $DEFAULT_MODEL"
+    fi
+    CURRENT_MODEL="$DEFAULT_MODEL"
+    CONSECUTIVE_FAILURES=0
+  fi
+
+  echo "[$(date)] Iteration $i — model: $CURRENT_MODEL — result: $(echo "$OUTPUT" | grep -oE '(STORY_IMPLEMENTED|STORY_FAILED|PHASE_COMPLETE)' | head -1)" >> "$SCRIPT_DIR/progress.txt"
   echo "Iteration $i done. Continuing..."
   sleep 2
 done
