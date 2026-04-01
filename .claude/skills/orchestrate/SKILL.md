@@ -134,6 +134,22 @@ Build the dependency graph. Identify **parallel groups**, **sequential chains**,
 5. **Risk assessment** — conflict likelihood, shared files
 6. **Rationale** — why this order is safest
 
+#### `patterns.json` schema (repo root, populated between groups)
+
+```json
+{
+  "patterns": [
+    {
+      "id": "P1",
+      "learned_in": "phase-a",
+      "description": "Use server actions instead of API routes for mutations",
+      "applies_to": ["phase-b", "phase-c"],
+      "confidence": "high"
+    }
+  ]
+}
+```
+
 #### Generate `prd.json` in each workspace
 
 Use the `/ralph` skill approach: convert each phase's tasks from `todo.md` into right-sized user stories.
@@ -264,6 +280,12 @@ section at the TOP of progress.txt. Only general, reusable patterns.
 ## Task (repeated)
 Read prd.json. Pick highest priority story where passes is false. Implement ONE story.
 Quality checks. Commit. Mark passes true. Append progress. Stop. The loop handles iteration.
+
+## Known Patterns
+
+_(populated by orchestrator before this group starts)_
+
+[patterns injected from completed phases will appear here]
 ```
 
 #### Generate `ralph-loop.sh` in each workspace
@@ -517,10 +539,12 @@ Use the Bash tool to execute this. Each `ralph-loop.sh` runs independently, spaw
 
 **For sequential groups** (depend on prior group):
 Wait for the prior group to complete. Before launching the next group:
-1. Collect Codebase Patterns from all completed workspaces' `progress.txt`
-2. Update the next group's `CLAUDE.md` files with those patterns
-3. Update `execution.md` with actual results
-4. Launch the next group's `ralph-loop.sh` scripts in parallel
+1. Parse `progress.txt` from all completed workspaces
+2. Extract patterns into `patterns.json` at repo root (use the schema from Phase 3b)
+3. For each next-group workspace, inject relevant patterns (matching `applies_to`) into the workspace's `CLAUDE.md` `## Known Patterns` section
+4. Update next-group `CLAUDE.md` files with the injected patterns before launching
+5. Update `execution.md` with actual results
+6. Launch the next group's `ralph-loop.sh` scripts in parallel
 
 #### Completion tracking
 - Phase complete when `ralph-loop.sh` exits 0 (all stories `passes: true`)
@@ -633,6 +657,7 @@ Repo-root tracking files preserved. Phase-local files deleted with worktree.
 | `CLAUDE.md` | each worktree | Phase 3b |
 | `ralph-loop.sh` | each worktree | Phase 3b |
 | `VERIFY.md` | each worktree | Phase 3b (consensus only) |
+| `patterns.json` | repo root | Phase 3c (between groups) |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---
