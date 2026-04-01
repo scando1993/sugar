@@ -232,6 +232,17 @@ section at the TOP of progress.txt. Only general, reusable patterns.
 - Follow existing code patterns
 - Keep changes focused to this phase's scope
 
+## Red Flags — If You Catch Yourself Thinking:
+
+| Thought | Reality |
+|---|---|
+| "I'll just implement two quick stories in one iteration" | ONE story per iteration. The loop handles iteration. No exceptions. |
+| "The tests mostly pass, I'll commit and fix later" | ALL commits must pass quality checks. Broken commits poison every future iteration. |
+| "This dependency isn't really needed, I'll skip it" | The dependency graph exists for a reason. Never start dependent work before prerequisites complete. |
+| "I know what changed, I don't need to read progress.txt" | Progress.txt IS your memory. You have NO context without it. Read it FIRST. |
+| "This is a trivial change, I don't need to run checks" | Every commit gets checked. No exceptions. The one you skip is the one that breaks everything. |
+| "I'll refactor this while I'm here" | Stay in scope. Implement the story. Nothing more. |
+
 ## Context
 - Original task: [full $ARGUMENTS]
 - Phase scope: [scope from plan.md]
