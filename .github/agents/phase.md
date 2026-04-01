@@ -86,6 +86,23 @@ Build dependency graph. Identify parallel groups, sequential chains, critical pa
 4. Critical path analysis
 5. Risk assessment
 6. Rationale
+7. Model strategy — default model per phase, escalation thresholds, rationale
+
+#### `patterns.json` schema (repo root, populated between groups)
+
+```json
+{
+  "patterns": [
+    {
+      "id": "P1",
+      "learned_in": "phase-a",
+      "description": "Use server actions instead of API routes for mutations",
+      "applies_to": ["phase-b", "phase-c"],
+      "confidence": "high"
+    }
+  ]
+}
+```
 
 #### `prd.json` in each workspace
 
@@ -234,6 +251,22 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Iteration $i of $MAX_ITERATIONS"
   echo "========================================"
 
+  # Extract current story ID for snapshot tag
+  STORY_ID=$(python3 -c "
+import json, sys
+with open('$PRD_FILE') as f: d = json.load(f)
+consensus = 'consensus' in d
+for s in d['userStories']:
+    if consensus:
+        if s.get('status') in ('pending', 'rejected', None):
+            print(s['id']); sys.exit(0)
+    else:
+        if not s.get('passes', False):
+            print(s['id']); sys.exit(0)
+" 2>/dev/null || echo "unknown")
+  ATTEMPT_NUM=$i
+  git tag "attempt-${STORY_ID}-v${ATTEMPT_NUM}" 2>/dev/null || true
+
   OUTPUT=""
   RETRY_DELAY=10
 
@@ -289,6 +322,8 @@ with open('$PRD_FILE', 'w') as f: json.dump(d, f, indent=2)
       FAIL_REASON=$(grep -h "VOTE:FAIL" "$VOTE_DIR"/*.txt | head -1)
       echo "Consensus: FAIL — rejecting story $STORY_ID: $FAIL_REASON"
       echo "[$(date)] REJECTED $STORY_ID: $FAIL_REASON" >> "$SCRIPT_DIR/rejection_log.txt"
+      FAILURE_REPORT="{\"storyId\": \"$STORY_ID\", \"attempt\": $ATTEMPT_NUM, \"filesModified\": $(git diff --name-only 2>/dev/null | python3 -c 'import sys,json; print(json.dumps([l.strip() for l in sys.stdin]))' 2>/dev/null || echo '[]'), \"failureType\": \"$(echo "$OUTPUT" | grep -oE 'typecheck|lint|test|timeout' | head -1 || echo 'unknown')\"}"
+      echo "$FAILURE_REPORT" >> "$SCRIPT_DIR/failure_log.json"
       git checkout -- .
       python3 -c "
 import json
@@ -408,24 +443,35 @@ Memory persists via `prd.json` (state), `progress.txt` (learnings), and git (cod
 Follow `execution.md` group ordering. Stagger launches by 5s to prevent simultaneous API bursts — the loop scripts also add random jitter internally:
 
 ```bash
-/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 &
+/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 sonnet &
 PID_A=$!
 sleep 5
-/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 &
+/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 sonnet &
 PID_B=$!
 sleep 5
-/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 &
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 sonnet &
 PID_C=$!
 wait $PID_A $PID_B $PID_C
 ```
 
+#### Model selection per phase
+
+Choose the default model based on task complexity:
+- **Sonnet** (default): Well-scoped implementation tasks, refactors, migrations
+- **Haiku**: Mechanical tasks — config changes, simple file operations, boilerplate
+- **Opus**: Complex architectural decisions, cross-cutting refactors, ambiguous requirements
+
+The loop automatically escalates to Opus on 2+ consecutive failures regardless of the starting model.
+
 If `claude` CLI is not available, open one Copilot session per workspace and run each Ralph loop manually — do not start all sessions at the same time.
 
 **Between groups:**
-1. Collect Codebase Patterns from completed workspaces' `progress.txt`
-2. Update next group's `CLAUDE.md` with those patterns
-3. Update `execution.md` with results
-4. Launch next group
+1. Parse `progress.txt` from all completed workspaces
+2. Extract patterns into `patterns.json` at repo root (use the schema from Phase 3b)
+3. For each next-group workspace, inject relevant patterns (matching `applies_to`) into the workspace's `CLAUDE.md` `## Known Patterns` section
+4. Update next-group `CLAUDE.md` files with the injected patterns before launching
+5. Update `execution.md` with actual results
+6. Launch the next group's `ralph-loop.sh` scripts in parallel
 
 #### Rules
 - Never start dependent phase before prerequisites complete
@@ -493,6 +539,7 @@ git worktree prune
 | `CLAUDE.md` | each worktree | Phase 3b |
 | `ralph-loop.sh` | each worktree | Phase 3b |
 | `VERIFY.md` | each worktree | Phase 3b (consensus only) |
+| `patterns.json` | repo root | Phase 3c (between groups) |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---
