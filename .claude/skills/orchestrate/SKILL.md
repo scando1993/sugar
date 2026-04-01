@@ -133,6 +133,7 @@ Build the dependency graph. Identify **parallel groups**, **sequential chains**,
 4. **Critical path** — bottleneck analysis
 5. **Risk assessment** — conflict likelihood, shared files
 6. **Rationale** — why this order is safest
+7. Model strategy — default model per phase, escalation thresholds, rationale
 
 #### `patterns.json` schema (repo root, populated between groups)
 
@@ -519,11 +520,11 @@ Follow `execution.md` group ordering.
 
 ```bash
 # Launch all independent phases in parallel
-/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 &
+/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 sonnet &
 PID_A=$!
-/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 &
+/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 sonnet &
 PID_B=$!
-/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 &
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 sonnet &
 PID_C=$!
 
 # Wait for all to complete
@@ -534,6 +535,15 @@ echo "Phase A exit: $?"
 echo "Phase B exit: $?"
 echo "Phase C exit: $?"
 ```
+
+#### Model selection per phase
+
+Choose the default model based on task complexity:
+- **Sonnet** (default): Well-scoped implementation tasks, refactors, migrations
+- **Haiku**: Mechanical tasks — config changes, simple file operations, boilerplate
+- **Opus**: Complex architectural decisions, cross-cutting refactors, ambiguous requirements
+
+The loop automatically escalates to Opus on 2+ consecutive failures regardless of the starting model.
 
 Use the Bash tool to execute this. Each `ralph-loop.sh` runs independently, spawning fresh `claude` instances per story.
 
