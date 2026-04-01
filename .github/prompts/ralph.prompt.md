@@ -26,7 +26,9 @@ Convert the PRD at ${input} to `prd.json` format.
       "description": "As a [user], I want [feature] so that [benefit]",
       "acceptanceCriteria": ["Criterion 1", "Typecheck passes"],
       "priority": 1,
-      "passes": false,
+      "status": "pending",
+      "term": 0,
+      "votes": [],
       "notes": ""
     }
   ]
@@ -39,9 +41,8 @@ Convert the PRD at ${input} to `prd.json` format.
 2. **Ordering**: Dependencies first. Schema → backend → UI → validation.
 3. **Acceptance criteria**: Must be verifiable. Always include "Typecheck passes".
 4. **IDs**: Sequential (US-001, US-002, etc.)
-5. **All stories**: `passes: false`, empty `notes`
+5. All stories start with `status: "pending"`, `term: 0`, `votes: []`, and empty `notes`
 6. Always add "Typecheck passes" to every story
-7. For consensus mode: stories start with `status: "pending"`, `term: 0`, `votes: []` — the `passes` field is omitted
 
 ## Red Flags — If You Catch Yourself Thinking:
 

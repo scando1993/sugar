@@ -144,11 +144,10 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
 2. Read `progress.txt` — check the Codebase Patterns section first
 2b. Check `failure_log.json` (if it exists) — if the story you are about to implement has prior failure entries, read them and plan a DIFFERENT approach than what was tried before
 3. Verify you are on branch `[branch-name]`. If not: `git checkout [branch-name]`
-4. **Legacy mode:** Pick the **highest priority** user story where `passes: false`
-   **Consensus mode:** Pick the **highest priority** user story where `status` is `"pending"` or `"rejected"`
+4. Pick the **highest priority** user story where `status` is `"pending"` or `"rejected"`
    - If picking a `"rejected"` story: read `rejection_log.txt` first to understand what failed
    - After picking, set the story's `status` to `"implementing"` in prd.json
-5. If no stories remain unfinished (legacy: `passes: false`; consensus: no `pending` or `rejected`) → reply with: PHASE_COMPLETE
+5. If no stories remain unfinished (no `pending` or `rejected`) → reply with: PHASE_COMPLETE
 6. Implement that single user story
 7. **Quality Protocol (per story):**
    1. Implement the story
@@ -157,8 +156,7 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
    4. If checks pass: verify against prd.json criteria ONE MORE TIME
    5. Only THEN commit
    6. If anything fails at steps 2-4: fix, do NOT skip
-8. **Legacy:** If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
-   **Consensus:** Output: `STORY_IMPLEMENTED:[Story ID]` — the loop handles the verifier quorum and commit
+8. Output: `STORY_IMPLEMENTED:[Story ID]` — the loop handles the verifier quorum and commit
 9. If checks fail → fix and retry (up to 3 attempts). If stuck:
    - Set the story's `notes` field in prd.json to describe the blocker
    - Append failure to progress.txt
@@ -167,14 +165,13 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
 If you cannot complete a story after 3 attempts, output: STORY_FAILED
 This signals the loop to escalate to a more capable model on the next iteration.
 Do NOT output STORY_FAILED if you haven't genuinely attempted 3 times.
-10. **Legacy:** Update `prd.json` to set `passes: true` for the completed story
-    **Consensus:** The loop updates `status` to `"passed"` or `"rejected"` after the quorum vote
+10. The loop updates `status` to `"passed"` or `"rejected"` after the quorum vote
 11. Append progress to `progress.txt` (format below)
-12. When ALL stories have `passes: true` → push: `git push origin [branch-name]`
+12. When ALL stories have `status: "passed"` → push: `git push origin [branch-name]`
 
 ## Stop Condition
 
-After completing a story, check if ALL stories have `passes: true`.
+After completing a story, check if ALL stories have `status: "passed"`.
 If yes, push and reply with exactly: PHASE_COMPLETE
 If no, end your response normally — the loop script will spawn a fresh iteration.
 
@@ -223,8 +220,8 @@ section at the TOP of progress.txt. Only general, reusable patterns.
 - Patterns from prior phases: [codebase patterns from completed phases, or "none yet"]
 
 ## Task (repeated)
-Read prd.json. Pick highest priority story where passes is false. Implement ONE story.
-Quality checks. Commit. Mark passes true. Append progress. Stop. The loop handles iteration.
+Read prd.json. Pick highest priority story where status is "pending" or "rejected". Implement ONE story.
+Quality checks. Output STORY_IMPLEMENTED. Append progress. Stop. The loop handles iteration.
 
 ## Known Patterns
 
@@ -272,27 +269,15 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   STORY_ID=$(python3 -c "
 import json, sys
 with open('$PRD_FILE') as f: d = json.load(f)
-consensus = 'consensus' in d
 for s in d['userStories']:
-    if consensus:
-        if s.get('status') in ('pending', 'rejected', None):
-            print(s['id']); sys.exit(0)
-    else:
-        if not s.get('passes', False):
-            print(s['id']); sys.exit(0)
+    if s.get('status') in ('pending', 'rejected', None):
+        print(s['id']); sys.exit(0)
 " 2>/dev/null || echo "unknown")
   ATTEMPT_NUM=$i
   git tag "attempt-${STORY_ID}-v${ATTEMPT_NUM}" 2>/dev/null || true
 
   OUTPUT=""
   RETRY_DELAY=10
-
-  # Detect consensus mode
-  if grep -q '"consensus"' "$PRD_FILE"; then
-    CONSENSUS_MODE=1
-  else
-    CONSENSUS_MODE=0
-  fi
 
   for attempt in $(seq 1 $MAX_RETRIES); do
     OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1) && break
@@ -308,7 +293,7 @@ for s in d['userStories']:
   echo "$OUTPUT"
 
   # Consensus path: IMPLEMENT → VERIFY quorum → TALLY → commit or reject
-  if [ "$CONSENSUS_MODE" -eq 1 ] && echo "$OUTPUT" | grep -q "STORY_IMPLEMENTED"; then
+  if echo "$OUTPUT" | grep -q "STORY_IMPLEMENTED"; then
     STORY_ID=$(echo "$OUTPUT" | grep -oE 'STORY_IMPLEMENTED:[A-Z]+-[0-9]+' | cut -d: -f2 | head -1)
     echo "Story $STORY_ID implemented — running verifier quorum..."
 
@@ -456,7 +441,7 @@ ralph-loop.sh
 Memory persists via `prd.json` (state), `progress.txt` (learnings), and git (code). The agent never runs out of context because it handles ONE story per invocation.
 
 #### Resuming
-Re-run `ralph-loop.sh`. Fresh iterations pick up from first `passes: false`.
+Re-run `ralph-loop.sh`. Fresh iterations pick up from the first story with `status: "pending"` or `"rejected"`.
 
 #### Parallel execution
 

@@ -28,7 +28,9 @@ Converts existing PRDs to `prd.json` — the format that drives Ralph-style auto
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
+      "status": "pending",
+      "term": 0,
+      "votes": [],
       "notes": ""
     }
   ]
@@ -84,10 +86,9 @@ Bad: "Works correctly"
 1. Each user story becomes one JSON entry
 2. IDs: Sequential (US-001, US-002, etc.)
 3. Priority: Based on dependency order, then document order
-4. All stories: `passes: false` and empty `notes`
+4. All stories start with `status: "pending"`, `term: 0`, `votes: []`, and empty `notes`
 5. branchName: Derive from feature name, kebab-case
 6. Always add "Typecheck passes" to every story
-7. For consensus mode: stories start with `status: "pending"`, `term: 0`, `votes: []` — the `passes` field is omitted
 
 ---
 

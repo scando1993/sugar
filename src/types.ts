@@ -21,10 +21,9 @@ export interface UserStory {
   description: string;
   acceptanceCriteria: string[];
   priority: number;
-  passes?: boolean;
-  status?: 'pending' | 'implementing' | 'verifying' | 'passed' | 'rejected' | 'blocked';
-  term?: number;
-  votes?: Vote[];
+  status: 'pending' | 'implementing' | 'verifying' | 'passed' | 'rejected' | 'blocked';
+  term: number;
+  votes: Vote[];
   notes: string;
 }
 
@@ -32,7 +31,7 @@ export interface PrdJson {
   project: string;
   branchName: string;
   description: string;
-  consensus?: ConsensusConfig;
+  consensus: ConsensusConfig;
   userStories: UserStory[];
 }
 

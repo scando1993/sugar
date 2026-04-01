@@ -2,16 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PrdJson, UserStory, ValidationError } from './types';
 
-function isConsensusMode(prd: PrdJson): boolean {
-  return !!prd.consensus;
+function storyIsPassed(story: UserStory): boolean {
+  return story.status === 'passed';
 }
 
-function storyIsPassed(story: UserStory, consensusMode: boolean): boolean {
-  return consensusMode ? story.status === 'passed' : story.passes === true;
-}
-
-function storyIsBlocked(story: UserStory, consensusMode: boolean): boolean {
-  return consensusMode ? story.status === 'blocked' : !story.passes && !!story.notes;
+function storyIsBlocked(story: UserStory): boolean {
+  return story.status === 'blocked';
 }
 
 function validatePrd(prd: PrdJson): ValidationError[] {
@@ -31,10 +27,11 @@ function validatePrd(prd: PrdJson): ValidationError[] {
     return errors;
   }
 
-  const consensusMode = isConsensusMode(prd);
-
-  if (consensusMode) {
-    const c = prd.consensus!;
+  // Validate consensus config
+  if (!prd.consensus) {
+    errors.push({ field: 'consensus', message: 'Missing consensus config' });
+  } else {
+    const c = prd.consensus;
     if (!c.quorumSize || c.quorumSize <= 0) {
       errors.push({ field: 'consensus.quorumSize', message: 'quorumSize must be > 0' });
     }
@@ -90,30 +87,25 @@ function validatePrd(prd: PrdJson): ValidationError[] {
       errors.push({ storyId: story.id, field: 'priority', message: 'Priority must be a positive number' });
     }
 
-    if (consensusMode) {
-      if (story.status !== undefined && !validStatuses.has(story.status)) {
-        errors.push({ storyId: story.id, field: 'status', message: `Invalid status: ${story.status}` });
-      }
-      if (story.votes) {
-        story.votes.forEach((v, i) => {
-          if (typeof v.term !== 'number' || v.term < 0) {
-            errors.push({ storyId: story.id, field: `votes[${i}].term`, message: 'term must be >= 0' });
-          }
-          if (typeof v.verifier !== 'number' || v.verifier <= 0) {
-            errors.push({ storyId: story.id, field: `votes[${i}].verifier`, message: 'verifier must be > 0' });
-          }
-          if (v.result !== 'pass' && v.result !== 'fail') {
-            errors.push({ storyId: story.id, field: `votes[${i}].result`, message: 'result must be "pass" or "fail"' });
-          }
-          if (v.result === 'fail' && !v.reason) {
-            errors.push({ storyId: story.id, field: `votes[${i}].reason`, message: 'fail votes must have a reason' });
-          }
-        });
-      }
-    } else {
-      if (typeof story.passes !== 'boolean') {
-        errors.push({ storyId: story.id, field: 'passes', message: 'passes must be a boolean' });
-      }
+    if (!validStatuses.has(story.status)) {
+      errors.push({ storyId: story.id, field: 'status', message: `Invalid status: ${story.status}` });
+    }
+
+    if (story.votes) {
+      story.votes.forEach((v, i) => {
+        if (typeof v.term !== 'number' || v.term < 0) {
+          errors.push({ storyId: story.id, field: `votes[${i}].term`, message: 'term must be >= 0' });
+        }
+        if (typeof v.verifier !== 'number' || v.verifier <= 0) {
+          errors.push({ storyId: story.id, field: `votes[${i}].verifier`, message: 'verifier must be > 0' });
+        }
+        if (v.result !== 'pass' && v.result !== 'fail') {
+          errors.push({ storyId: story.id, field: `votes[${i}].result`, message: 'result must be "pass" or "fail"' });
+        }
+        if (v.result === 'fail' && !v.reason) {
+          errors.push({ storyId: story.id, field: `votes[${i}].reason`, message: 'fail votes must have a reason' });
+        }
+      });
     }
   }
 
@@ -128,85 +120,52 @@ function validatePrd(prd: PrdJson): ValidationError[] {
 }
 
 function reportStatus(prd: PrdJson): void {
-  const consensusMode = isConsensusMode(prd);
   const total = prd.userStories.length;
 
   console.log(`\n${prd.project} — ${prd.branchName}`);
   console.log(prd.description);
   console.log('='.repeat(50));
 
-  if (consensusMode) {
-    const byStatus: Record<string, UserStory[]> = {
-      passed: [], implementing: [], verifying: [], rejected: [], blocked: [], pending: []
-    };
-    for (const story of prd.userStories) {
-      const s = story.status || 'pending';
-      if (byStatus[s]) byStatus[s].push(story);
-    }
+  const byStatus: Record<string, UserStory[]> = {
+    passed: [], implementing: [], verifying: [], rejected: [], blocked: [], pending: []
+  };
+  for (const story of prd.userStories) {
+    const s = story.status || 'pending';
+    if (byStatus[s]) byStatus[s].push(story);
+  }
 
-    const passing = byStatus.passed.length;
-    console.log(`Progress: ${passing}/${total} stories passed`);
+  const passing = byStatus.passed.length;
+  console.log(`Progress: ${passing}/${total} stories passed`);
 
-    const categories: Array<{ key: string; label: string }> = [
-      { key: 'blocked', label: 'Blocked' },
-      { key: 'rejected', label: 'Rejected' },
-      { key: 'verifying', label: 'Verifying' },
-      { key: 'implementing', label: 'Implementing' },
-      { key: 'pending', label: 'Pending' },
-      { key: 'passed', label: 'Passed' },
-    ];
+  const categories: Array<{ key: string; label: string }> = [
+    { key: 'blocked', label: 'Blocked' },
+    { key: 'rejected', label: 'Rejected' },
+    { key: 'verifying', label: 'Verifying' },
+    { key: 'implementing', label: 'Implementing' },
+    { key: 'pending', label: 'Pending' },
+    { key: 'passed', label: 'Passed' },
+  ];
 
-    for (const { key, label } of categories) {
-      const stories = byStatus[key];
-      if (stories.length === 0) continue;
-      console.log(`\n${label} (${stories.length}):`);
-      for (const story of stories) {
-        const marker = key === 'passed' ? 'x' : key === 'blocked' ? '!' : ' ';
-        console.log(`  [${marker}] ${story.id}: ${story.title}`);
-        if (story.notes) console.log(`      ${story.notes}`);
-        if ((key === 'rejected' || key === 'verifying') && story.votes && story.votes.length > 0) {
-          const currentTerm = story.term ?? 0;
-          const termVotes = story.votes.filter(v => v.term === currentTerm);
-          const pass = termVotes.filter(v => v.result === 'pass').length;
-          const fail = termVotes.filter(v => v.result === 'fail').length;
-          console.log(`      Votes (term ${currentTerm}): ${pass} pass, ${fail} fail`);
-        }
+  for (const { key, label } of categories) {
+    const stories = byStatus[key];
+    if (stories.length === 0) continue;
+    console.log(`\n${label} (${stories.length}):`);
+    for (const story of stories) {
+      const marker = key === 'passed' ? 'x' : key === 'blocked' ? '!' : ' ';
+      console.log(`  [${marker}] ${story.id}: ${story.title}`);
+      if (story.notes) console.log(`      ${story.notes}`);
+      if ((key === 'rejected' || key === 'verifying') && story.votes && story.votes.length > 0) {
+        const currentTerm = story.term ?? 0;
+        const termVotes = story.votes.filter(v => v.term === currentTerm);
+        const pass = termVotes.filter(v => v.result === 'pass').length;
+        const fail = termVotes.filter(v => v.result === 'fail').length;
+        console.log(`      Votes (term ${currentTerm}): ${pass} pass, ${fail} fail`);
       }
     }
-  } else {
-    const passing = prd.userStories.filter(s => s.passes).length;
-    const remaining = prd.userStories.filter(s => !s.passes);
-    const blocked = prd.userStories.filter(s => storyIsBlocked(s, false));
+  }
 
-    console.log(`Progress: ${passing}/${total} stories passing`);
-
-    if (blocked.length > 0) {
-      console.log(`\nBlocked (${blocked.length}):`);
-      for (const story of blocked) {
-        console.log(`  [!] ${story.id}: ${story.title}`);
-        console.log(`      ${story.notes}`);
-      }
-    }
-
-    const pendingUnblocked = remaining.filter(s => !s.notes);
-    if (pendingUnblocked.length > 0) {
-      console.log(`\nRemaining (${pendingUnblocked.length}):`);
-      for (const story of pendingUnblocked) {
-        console.log(`  [ ] ${story.id}: ${story.title} (priority ${story.priority})`);
-      }
-    }
-
-    const completed = prd.userStories.filter(s => s.passes);
-    if (completed.length > 0) {
-      console.log(`\nCompleted (${completed.length}):`);
-      for (const story of completed) {
-        console.log(`  [x] ${story.id}: ${story.title}`);
-      }
-    }
-
-    if (passing === total) {
-      console.log('\nAll stories complete — ready to push.');
-    }
+  if (passing === total) {
+    console.log('\nAll stories complete — ready to push.');
   }
 
   console.log('');
@@ -231,10 +190,9 @@ function scanWorkspaces(basePath: string): void {
 
     const raw = fs.readFileSync(prdPath, 'utf-8');
     const prd: PrdJson = JSON.parse(raw);
-    const consensusMode = isConsensusMode(prd);
-    const passing = prd.userStories.filter(s => storyIsPassed(s, consensusMode)).length;
+    const passing = prd.userStories.filter(s => storyIsPassed(s)).length;
     const total = prd.userStories.length;
-    const blocked = prd.userStories.filter(s => storyIsBlocked(s, consensusMode)).length;
+    const blocked = prd.userStories.filter(s => storyIsBlocked(s)).length;
 
     totalStories += total;
     totalPassing += passing;
@@ -293,15 +251,14 @@ function generateDashboard(basePath: string): void {
   const timestamp = new Date().toISOString();
 
   const phaseCards = phases.map(({ name, prd }) => {
-    const consensusMode = isConsensusMode(prd);
-    const passing = prd.userStories.filter(s => storyIsPassed(s, consensusMode)).length;
+    const passing = prd.userStories.filter(s => storyIsPassed(s)).length;
     const total = prd.userStories.length;
     const pct = total > 0 ? Math.round((passing / total) * 100) : 0;
     const color = pct === 100 ? '#22c55e' : pct > 50 ? '#f59e0b' : '#ef4444';
 
     const storyRows = prd.userStories.map(s => {
-      const status = consensusMode ? (s.status || 'pending') : (s.passes ? 'passed' : s.notes ? 'blocked' : 'pending');
-      const badge = status === 'passed' ? '✓' : status === 'blocked' ? '!' : status === 'rejected' ? '✗' : '○';
+      const status = s.status || 'pending';
+      const badge = status === 'passed' ? '\u2713' : status === 'blocked' ? '!' : status === 'rejected' ? '\u2717' : '\u25CB';
       return `<tr><td>${badge}</td><td>${s.id}</td><td>${s.title}</td><td>${status}</td><td>${s.notes || ''}</td></tr>`;
     }).join('');
 
