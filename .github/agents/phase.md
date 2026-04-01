@@ -202,20 +202,27 @@ _(populated by orchestrator before this group starts)_
 
 #### Generate `ralph-loop.sh` in each workspace
 
-The iteration engine — spawns fresh agent instances per story, with retry and backoff for transient API errors:
+The iteration engine — spawns fresh agent instances per story, with retry and backoff for transient API errors AND model escalation for implementation failures:
 
 ```bash
 #!/bin/bash
 # Ralph loop — [phase-name]
-# Usage: ./ralph-loop.sh [max_iterations]
+# Usage: ./ralph-loop.sh [max_iterations] [default_model]
 
 MAX_ITERATIONS=${1:-20}
+DEFAULT_MODEL="${2:-sonnet}"
+ESCALATION_MODEL="opus"
+CURRENT_MODEL="$DEFAULT_MODEL"
+CONSECUTIVE_FAILURES=0
+ESCALATION_THRESHOLD=2
 MAX_RETRIES=3       # retries per iteration on transient errors
 BASE_SLEEP=8        # seconds between successful iterations
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PRD_FILE="$SCRIPT_DIR/prd.json"
 
 echo "Starting Ralph loop — Phase: [phase-name]"
 echo "Max iterations: $MAX_ITERATIONS"
+echo "Default model: $DEFAULT_MODEL | Escalation model: $ESCALATION_MODEL"
 
 # Stagger parallel phase starts to avoid simultaneous API bursts
 JITTER=$((RANDOM % 15))
@@ -223,13 +230,15 @@ JITTER=$((RANDOM % 15))
 
 for i in $(seq 1 $MAX_ITERATIONS); do
   echo ""
-  echo "=== Iteration $i of $MAX_ITERATIONS ==="
+  echo "========================================"
+  echo "  Iteration $i of $MAX_ITERATIONS"
+  echo "========================================"
 
   OUTPUT=""
   RETRY_DELAY=10
 
   for attempt in $(seq 1 $MAX_RETRIES); do
-    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1) && break
+    OUTPUT=$(claude --model "$CURRENT_MODEL" --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1) && break
     if echo "$OUTPUT" | grep -qiE "transient|rate.?limit|overload|503|529"; then
       echo "Transient error (attempt $attempt/$MAX_RETRIES) — retrying in ${RETRY_DELAY}s..."
       sleep $RETRY_DELAY
@@ -246,6 +255,24 @@ for i in $(seq 1 $MAX_ITERATIONS); do
     exit 0
   fi
 
+  # Check if story failed (implementation failure) — escalate model if needed
+  # This is SEPARATE from transient API errors handled above
+  if echo "$OUTPUT" | grep -qiE "STORY_FAILED|stuck|blocked|retry.?exhausted"; then
+    CONSECUTIVE_FAILURES=$((CONSECUTIVE_FAILURES + 1))
+    echo "Implementation failure detected ($CONSECUTIVE_FAILURES consecutive)"
+    if [ "$CONSECUTIVE_FAILURES" -ge "$ESCALATION_THRESHOLD" ] && [ "$CURRENT_MODEL" != "$ESCALATION_MODEL" ]; then
+      echo ">>> Escalating from $CURRENT_MODEL to $ESCALATION_MODEL"
+      CURRENT_MODEL="$ESCALATION_MODEL"
+    fi
+  else
+    if [ "$CURRENT_MODEL" != "$DEFAULT_MODEL" ]; then
+      echo ">>> De-escalating back to $DEFAULT_MODEL"
+    fi
+    CURRENT_MODEL="$DEFAULT_MODEL"
+    CONSECUTIVE_FAILURES=0
+  fi
+
+  echo "[$(date)] Iteration $i — model: $CURRENT_MODEL — result: $(echo "$OUTPUT" | grep -oE '(STORY_IMPLEMENTED|STORY_FAILED|PHASE_COMPLETE)' | head -1)" >> "$SCRIPT_DIR/progress.txt"
   echo "Sleeping ${BASE_SLEEP}s before next story..."
   sleep $BASE_SLEEP
 done
