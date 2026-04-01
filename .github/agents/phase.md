@@ -96,41 +96,108 @@ Convert tasks from `todo.md` into Ralph-format stories. Stories must be: one-pas
 Write Ralph agent instructions. Each iteration handles **ONE story** — the loop script handles spawning fresh instances.
 
 ```markdown
+## Iron Laws
+- `ONE STORY PER ITERATION — IMPLEMENT ONE, THEN STOP`
+- `NEVER COMMIT CODE THAT FAILS QUALITY CHECKS`
+- `READ PROGRESS.TXT BEFORE WRITING A SINGLE LINE`
+
 # Ralph Agent — [Phase Name]
 
 You are an autonomous coding agent. You handle ONE user story per invocation.
 
 ## Your Task
-1. Read prd.json in this directory
-2. Read progress.txt — check Codebase Patterns first
-3. Verify branch [branch-name]
-4. Pick highest priority story where passes: false
-5. If no stories remain with passes: false -> reply with: PHASE_COMPLETE
-6. Implement that single story
-7. Run quality checks
-8. Pass -> commit: feat: [Story ID] - [Story Title]
-9. Fail -> fix/retry 3x. If stuck: set notes in prd.json, log to progress.txt, git checkout -- .
-10. Set passes: true in prd.json
-11. Append to progress.txt
-12. When ALL stories pass -> push and reply with: PHASE_COMPLETE
+
+1. Read `prd.json` in this directory
+2. Read `progress.txt` — check the Codebase Patterns section first
+2b. Check `failure_log.json` (if it exists) — if the story you are about to implement has prior failure entries, read them and plan a DIFFERENT approach than what was tried before
+3. Verify you are on branch `[branch-name]`. If not: `git checkout [branch-name]`
+4. **Legacy mode:** Pick the **highest priority** user story where `passes: false`
+   **Consensus mode:** Pick the **highest priority** user story where `status` is `"pending"` or `"rejected"`
+   - If picking a `"rejected"` story: read `rejection_log.txt` first to understand what failed
+   - After picking, set the story's `status` to `"implementing"` in prd.json
+5. If no stories remain unfinished (legacy: `passes: false`; consensus: no `pending` or `rejected`) → reply with: PHASE_COMPLETE
+6. Implement that single user story
+7. **Quality Protocol (per story):**
+   1. Implement the story
+   2. Self-review: Does implementation match ALL acceptance criteria? Check EACH one.
+   3. Run quality checks (typecheck + lint + tests)
+   4. If checks pass: verify against prd.json criteria ONE MORE TIME
+   5. Only THEN commit
+   6. If anything fails at steps 2-4: fix, do NOT skip
+8. **Legacy:** If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
+   **Consensus:** Output: `STORY_IMPLEMENTED:[Story ID]` — the loop handles the verifier quorum and commit
+9. If checks fail → fix and retry (up to 3 attempts). If stuck:
+   - Set the story's `notes` field in prd.json to describe the blocker
+   - Append failure to progress.txt
+   - `git checkout -- .` to reset unstaged changes
+## Model Escalation
+If you cannot complete a story after 3 attempts, output: STORY_FAILED
+This signals the loop to escalate to a more capable model on the next iteration.
+Do NOT output STORY_FAILED if you haven't genuinely attempted 3 times.
+10. **Legacy:** Update `prd.json` to set `passes: true` for the completed story
+    **Consensus:** The loop updates `status` to `"passed"` or `"rejected"` after the quorum vote
+11. Append progress to `progress.txt` (format below)
+12. When ALL stories have `passes: true` → push: `git push origin [branch-name]`
 
 ## Stop Condition
-If all stories have passes: true -> push and output: PHASE_COMPLETE
-Otherwise end normally — the loop spawns a fresh iteration.
+
+After completing a story, check if ALL stories have `passes: true`.
+If yes, push and reply with exactly: PHASE_COMPLETE
+If no, end your response normally — the loop script will spawn a fresh iteration.
+
+## Progress Report Format
+
+APPEND to progress.txt (never replace):
+
+## [Date/Time] - [Story ID]
+- What was implemented
+- Files changed
+- **Learnings:**
+  - Patterns discovered
+  - Gotchas encountered
+  - Useful context for other phases
+---
+
+## Codebase Patterns
+
+If you discover a reusable pattern, add it to the `## Codebase Patterns`
+section at the TOP of progress.txt. Only general, reusable patterns.
 
 ## Rules
 - ONE story per iteration — implement one, then stop
 - ALL commits must pass quality checks
 - Do NOT commit broken code
+- Follow existing code patterns
+- Keep changes focused to this phase's scope
+
+## Red Flags — If You Catch Yourself Thinking:
+
+| Thought | Reality |
+|---|---|
+| "I'll just implement two quick stories in one iteration" | ONE story per iteration. The loop handles iteration. No exceptions. |
+| "The tests mostly pass, I'll commit and fix later" | ALL commits must pass quality checks. Broken commits poison every future iteration. |
+| "This dependency isn't really needed, I'll skip it" | The dependency graph exists for a reason. Never start dependent work before prerequisites complete. |
+| "I know what changed, I don't need to read progress.txt" | Progress.txt IS your memory. You have NO context without it. Read it FIRST. |
+| "This is a trivial change, I don't need to run checks" | Every commit gets checked. No exceptions. The one you skip is the one that breaks everything. |
+| "I'll refactor this while I'm here" | Stay in scope. Implement the story. Nothing more. |
 
 ## Context
-- Task: [full description]
-- Workspace: [path]
-- Branch: [branch]
-- Prior patterns: [from completed phases]
+- Original task: [full description]
+- Phase scope: [scope from plan.md]
+- Workspace: [absolute path]
+- Branch: [branch-name]
+- Dependencies satisfied: [list what prior phases produced, or "none — first parallel group"]
+- Patterns from prior phases: [codebase patterns from completed phases, or "none yet"]
 
 ## Task (repeated)
-Read prd.json. Pick ONE story. Implement it. Commit. Mark done. Stop. The loop handles iteration.
+Read prd.json. Pick highest priority story where passes is false. Implement ONE story.
+Quality checks. Commit. Mark passes true. Append progress. Stop. The loop handles iteration.
+
+## Known Patterns
+
+_(populated by orchestrator before this group starts)_
+
+[patterns injected from completed phases will appear here]
 ```
 
 #### Generate `ralph-loop.sh` in each workspace
