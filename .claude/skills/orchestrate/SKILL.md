@@ -263,15 +263,21 @@ This is the iteration engine — equivalent to Ralph's `ralph.sh`. It spawns fre
 ```bash
 #!/bin/bash
 # Ralph loop for phase: [phase-name]
-# Usage: ./ralph-loop.sh [max_iterations]
+# Usage: ./ralph-loop.sh [max_iterations] [default_model]
 set -e
 
 MAX_ITERATIONS=${1:-20}
+DEFAULT_MODEL="${2:-sonnet}"
+ESCALATION_MODEL="opus"
+CURRENT_MODEL="$DEFAULT_MODEL"
+CONSECUTIVE_FAILURES=0
+ESCALATION_THRESHOLD=2
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PRD_FILE="$SCRIPT_DIR/prd.json"
 
 echo "Starting Ralph loop — Phase: [phase-name]"
 echo "Max iterations: $MAX_ITERATIONS"
+echo "Default model: $DEFAULT_MODEL | Escalation model: $ESCALATION_MODEL"
 
 for i in $(seq 1 $MAX_ITERATIONS); do
   echo ""
