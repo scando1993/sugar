@@ -168,6 +168,11 @@ Write a `CLAUDE.md` file in each phase workspace root. This is the Ralph agent i
 Each iteration handles **ONE story** — just like Ralph. The `ralph-loop.sh` script (below) handles spawning fresh instances.
 
 ```markdown
+## Iron Laws
+- `ONE STORY PER ITERATION — IMPLEMENT ONE, THEN STOP`
+- `NEVER COMMIT CODE THAT FAILS QUALITY CHECKS`
+- `READ PROGRESS.TXT BEFORE WRITING A SINGLE LINE`
+
 # Ralph Agent — [Phase Name]
 
 You are an autonomous coding agent. You handle ONE user story per invocation.
@@ -180,7 +185,13 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
 4. Pick the **highest priority** user story where `passes: false`
 5. If no stories remain with `passes: false` → reply with: PHASE_COMPLETE
 6. Implement that single user story
-7. Run quality checks (typecheck, lint, test — whatever the project uses)
+7. **Quality Protocol (per story):**
+   1. Implement the story
+   2. Self-review: Does implementation match ALL acceptance criteria? Check EACH one.
+   3. Run quality checks (typecheck + lint + tests)
+   4. If checks pass: verify against prd.json criteria ONE MORE TIME
+   5. Only THEN commit
+   6. If anything fails at steps 2-4: fix, do NOT skip
 8. If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
 9. If checks fail → fix and retry (up to 3 attempts). If stuck:
    - Set the story's `notes` field in prd.json to describe the blocker
