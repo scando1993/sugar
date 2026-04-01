@@ -197,6 +197,10 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
    - Set the story's `notes` field in prd.json to describe the blocker
    - Append failure to progress.txt
    - `git checkout -- .` to reset unstaged changes
+## Model Escalation
+If you cannot complete a story after 3 attempts, output: STORY_FAILED
+This signals the loop to escalate to a more capable model on the next iteration.
+Do NOT output STORY_FAILED if you haven't genuinely attempted 3 times.
 10. Update `prd.json` to set `passes: true` for the completed story
 11. Append progress to `progress.txt` (format below)
 12. When ALL stories have `passes: true` → push: `git push origin [branch-name]`
