@@ -181,6 +181,7 @@ You are an autonomous coding agent. You handle ONE user story per invocation.
 
 1. Read `prd.json` in this directory
 2. Read `progress.txt` — check the Codebase Patterns section first
+2b. Check `failure_log.json` (if it exists) — if the story you are about to implement has prior failure entries, read them and plan a DIFFERENT approach than what was tried before
 3. Verify you are on branch `[branch-name]`. If not: `git checkout [branch-name]`
 4. **Legacy mode:** Pick the **highest priority** user story where `passes: false`
    **Consensus mode:** Pick the **highest priority** user story where `status` is `"pending"` or `"rejected"`
@@ -294,6 +295,22 @@ for i in $(seq 1 $MAX_ITERATIONS); do
   echo "  Iteration $i of $MAX_ITERATIONS"
   echo "========================================"
 
+  # Extract current story ID for snapshot tag
+  STORY_ID=$(python3 -c "
+import json, sys
+with open('$PRD_FILE') as f: d = json.load(f)
+consensus = 'consensus' in d
+for s in d['userStories']:
+    if consensus:
+        if s.get('status') in ('pending', 'rejected', None):
+            print(s['id']); sys.exit(0)
+    else:
+        if not s.get('passes', False):
+            print(s['id']); sys.exit(0)
+" 2>/dev/null || echo "unknown")
+  ATTEMPT_NUM=$i
+  git tag "attempt-${STORY_ID}-v${ATTEMPT_NUM}" 2>/dev/null || true
+
   # Detect consensus mode
   if grep -q '"consensus"' "$PRD_FILE"; then
     CONSENSUS_MODE=1
@@ -339,6 +356,8 @@ with open('$PRD_FILE', 'w') as f: json.dump(d, f, indent=2)
         FAIL_REASON=\$(grep -h "VOTE:FAIL" "$VOTE_DIR"/*.txt | head -1)
         echo "Consensus: FAIL — rejecting story $STORY_ID: \$FAIL_REASON"
         echo "[\$(date)] REJECTED $STORY_ID: \$FAIL_REASON" >> "\$SCRIPT_DIR/rejection_log.txt"
+        FAILURE_REPORT="{\"storyId\": \"$STORY_ID\", \"attempt\": $ATTEMPT_NUM, \"filesModified\": $(git diff --name-only 2>/dev/null | python3 -c 'import sys,json; print(json.dumps([l.strip() for l in sys.stdin]))' 2>/dev/null || echo '[]'), \"failureType\": \"$(echo "$OUTPUT" | grep -oE 'typecheck|lint|test|timeout' | head -1 || echo 'unknown')\"}"
+        echo "$FAILURE_REPORT" >> "$SCRIPT_DIR/failure_log.json"
         git checkout -- .
         python3 -c "
 import json
