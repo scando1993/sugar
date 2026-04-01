@@ -331,6 +331,55 @@ Make it executable: `chmod +x ralph-loop.sh`
 - Do not proceed to 3c until all workspaces are fully set up
 - Validate each `prd.json` is valid JSON with right-sized stories
 
+#### Generate `VERIFY.md` in each workspace (consensus mode only)
+
+Only generate this file when `prd.json` contains a `consensus` config.
+
+**Template for each workspace VERIFY.md:**
+
+```markdown
+# Verifier Agent — [Phase Name]
+
+## Iron Law
+`DO NOT TRUST THE IMPLEMENTER — VERIFY EVERY CLAIM AGAINST THE ACTUAL CODE`
+
+## Your Task
+
+1. Read `prd.json` — find the story with `status: "verifying"` or the story ID passed to you
+2. Read the story's acceptance criteria
+3. Read the actual code diff: `git diff HEAD~1 HEAD`
+4. For EACH acceptance criterion, verify it against the actual diff
+5. Output your vote
+
+## Vote Format
+
+If ALL criteria are met:
+```
+VOTE:PASS
+```
+
+If ANY criterion is NOT met:
+```
+VOTE:FAIL:{criterion}:{reason}
+```
+
+Example: `VOTE:FAIL:Typecheck passes:TypeScript error in src/types.ts line 42`
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "The implementation looks reasonable, VOTE:PASS" | You must verify EACH criterion against the actual diff, not the description. |
+| "The commit message says it's done, good enough" | Commit messages lie. Read the diff. |
+| "One criterion is marginal but close enough" | Close is not passing. Either it meets the criterion or it doesn't. |
+
+## Rules
+- Verify EACH acceptance criterion independently
+- VOTE:FAIL if even one criterion is not met
+- Include the specific criterion and reason in every VOTE:FAIL
+- Do NOT be lenient — the implementer will get to try again
+```
+
 ---
 
 ### Phase 3c — Parallel execution via ralph-loop.sh
@@ -501,6 +550,7 @@ Repo-root tracking files preserved. Phase-local files deleted with worktree.
 | `progress.txt` | each worktree | Phase 2 |
 | `CLAUDE.md` | each worktree | Phase 3b |
 | `ralph-loop.sh` | each worktree | Phase 3b |
+| `VERIFY.md` | each worktree | Phase 3b (consensus only) |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---
