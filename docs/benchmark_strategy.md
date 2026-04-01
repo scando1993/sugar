@@ -2,13 +2,18 @@
 
 ---
 
-## The Three Contestants
+## The Five Contestants
 
-| # | System | Description |
-|---|---|---|
-| **A** | orchestration-skills | Full phase workflow: plan → worktrees → prd.json → ralph-loop.sh |
-| **B** | superpowers | Full pipeline: brainstorming → writing-plans → subagent-driven-development |
-| **C** | naive Ralph | Raw `claude --print` loop with a basic CLAUDE.md and prd.json, no phases, no dependency analysis, no pattern propagation |
+| # | System | Planning model | Execution model | Description |
+|---|---|---|---|---|
+| **A** | orchestration-skills (full) | Opus | Opus | Full phase workflow: plan → worktrees → prd.json → ralph-loop.sh |
+| **B** | superpowers | Opus | Opus | Full pipeline: brainstorming → writing-plans → subagent-driven-development |
+| **C** | naive Ralph | — | Opus | Raw `claude --print` loop with a basic CLAUDE.md and prd.json, no phases, no dependency analysis, no pattern propagation |
+| **D** | orchestration-skills (tiered) | Opus | Sonnet | Same as A but ralph-loop.sh uses Sonnet for execution, Opus for planning only |
+| **E** | orchestration-skills (aggressive) | Opus | Haiku | Same as A but ralph-loop.sh uses Haiku for execution with Opus escalation on 2x failure |
+
+### Key Question for D and E
+If tiered execution scores within 90% of A at 20-50% of the cost, the model tiering strategy is validated. See [Model Tiering Strategy](model_tiering_strategy.md) for full rationale and adaptive escalation logic.
 
 ---
 
@@ -127,19 +132,35 @@ Superpowers requires human interaction (dispatching tasks, reviewing). To make i
 
 ---
 
-## Scoring Formula
+## Scoring Formulas
+
+### Performance Score (quality + completion)
 
 ```
-SCORE = (tests_passed / total_tests) * 100        # max 100
-      - (human_interventions * 5)                  # penalty per intervention
-      - (tokens_used / 100_000)                    # cost penalty
-      - (minutes_elapsed / 10)                     # time penalty
-      + (lint_clean ? 10 : 0)                      # quality bonus
-      + (typecheck_clean ? 10 : 0)                 # quality bonus
-      + (zero_interventions ? 20 : 0)              # autonomy bonus
+PERF_SCORE = (tests_passed / total_tests) * 100   # max 100
+           - (human_interventions * 5)             # penalty per intervention
+           + (lint_clean ? 10 : 0)                 # quality bonus
+           + (typecheck_clean ? 10 : 0)            # quality bonus
+           + (zero_interventions ? 20 : 0)         # autonomy bonus
 ```
 
-This rewards completion, penalizes cost/time/human-effort, and bonuses full autonomy.
+### Efficiency Score (cost-adjusted)
+
+```
+EFF_SCORE  = PERF_SCORE
+           - (tokens_used / 100_000)               # cost penalty
+           - (minutes_elapsed / 10)                 # time penalty
+```
+
+### Value Score (performance per dollar — the key metric for D and E)
+
+```
+VALUE_SCORE = PERF_SCORE / (estimated_cost_usd + 0.01)
+```
+
+Separating performance from efficiency lets us answer two questions:
+1. Does tiered execution maintain quality? (compare PERF_SCORE of A vs D vs E)
+2. Is the cost reduction worth it? (compare VALUE_SCORE across all five)
 
 ---
 
@@ -151,18 +172,28 @@ This rewards completion, penalizes cost/time/human-effort, and bonuses full auto
 | `benchmark/REQUIREMENTS.md` | Task descriptions mapped to test files |
 | `benchmark/run-benchmark.sh` | Harness that clones, times, and scores each run |
 | `benchmark/configs/` | Setup files for each contestant (CLAUDE.md, prd.json, skill configs) |
+| `benchmark/configs/contestant-d.env` | Model tiering config: `DEFAULT_MODEL=sonnet ESCALATION_MODEL=opus` |
+| `benchmark/configs/contestant-e.env` | Aggressive tiering config: `DEFAULT_MODEL=haiku ESCALATION_MODEL=opus` |
 | `benchmark/SCORING.md` | Rubric and formula documentation |
 
 ---
 
 ## Expected Outcomes (Hypotheses)
 
-| Metric | orchestration-skills | superpowers | naive Ralph |
-|---|---|---|---|
-| Task completion | High (autonomous loop) | High (human-guided) | Medium (no planning) |
-| Correctness | Medium-High | Highest (adversarial review) | Medium (no review) |
-| Token efficiency | Medium (planning overhead) | Low (heavy review loops) | Highest (minimal overhead) |
-| Time to complete | Fastest (parallel + autonomous) | Slowest (human bottleneck) | Medium (serial, no planning) |
-| Human interventions | Near zero | Many (by design) | Zero |
-| Recovery rate | Medium (3-retry + notes) | High (fix subagent dispatch) | Low (blind retry) |
-| Code quality | Medium | Highest (TDD + review) | Lowest (no quality gates) |
+| Metric | A: orch-skills (Opus) | B: superpowers | C: naive Ralph | D: orch-skills (Sonnet) | E: orch-skills (Haiku) |
+|---|---|---|---|---|---|
+| Task completion | High | High | Medium | High (slight drop) | Medium-High (more failures) |
+| Correctness | Medium-High | Highest | Medium | Medium (close to A) | Medium-Low (criteria drift) |
+| Token efficiency | Medium | Low | Highest | High (5x cheaper exec) | Highest (19x cheaper exec) |
+| Time to complete | Fastest | Slowest | Medium | Faster (Sonnet is quicker) | Fastest (Haiku is quickest) |
+| Human interventions | Near zero | Many | Zero | Near zero | Low (some escalations) |
+| Recovery rate | Medium | High | Low | Medium (escalation helps) | Low-Medium (more escalations) |
+| Code quality | Medium | Highest | Lowest | Medium (slight drop) | Low-Medium |
+| **Estimated cost** | ~$135 | ~$150+ | ~$90 | ~$63 | ~$50 |
+| **Value score** | Baseline | Low (expensive + slow) | Medium (cheap but messy) | **Likely highest** | High if quality holds |
+
+### Hypothesis to Validate
+
+**D (Opus planning + Sonnet execution) will be the optimal configuration** — achieving 85-95% of A's quality at 45-55% of the cost. E (Haiku execution) will show diminishing returns where quality drops faster than cost, but with adaptive escalation may still outperform C (naive Ralph) on quality while being cheaper.
+
+The critical threshold: if D's PERF_SCORE is within 10 points of A, model tiering is validated as the default execution strategy.
