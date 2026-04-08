@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sugar Rush - Orchestration Skills</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+  :root {
+    --bg-dark: #0a0a0f;
+    --bg-card: #12121a;
+    --bg-card-hover: #1a1a2e;
+    --accent: #6c63ff;
+    --accent-glow: rgba(108, 99, 255, 0.3);
+    --accent-secondary: #00d4aa;
+    --accent-warn: #ff6b6b;
+    --accent-yellow: #ffd93d;
+    --text-primary: #e8e8f0;
+    --text-secondary: #8888a0;
+    --text-muted: #555570;
+    --border: #2a2a3e;
+    --gradient-1: linear-gradient(135deg, #6c63ff, #00d4aa);
+    --gradient-2: linear-gradient(135deg, #ff6b6b, #ffd93d);
+    --gradient-3: linear-gradient(135deg, #00d4aa, #6c63ff);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  html, body {
+    width: 100%; height: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    overflow: hidden;
+  }
+
+  .deck {
+    width: 100%; height: 100%;
+    position: relative;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 80px;
+    opacity: 0;
+    transform: translateX(60px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+    overflow-y: auto;
+  }
+
+  .slide.active {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: all;
+  }
+
+  .slide.prev {
+    opacity: 0;
+    transform: translateX(-60px);
+  }
+
+  /* Progress bar */
+  .progress {
+    position: fixed;
+    top: 0; left: 0;
+    height: 3px;
+    background: var(--gradient-1);
+    transition: width 0.4s ease;
+    z-index: 100;
+    border-radius: 0 2px 2px 0;
+  }
+
+  /* Slide counter */
+  .counter {
+    position: fixed;
+    bottom: 24px; right: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    z-index: 100;
+  }
+
+  /* Navigation hints */
+  .nav-hint {
+    position: fixed;
+    bottom: 24px; left: 32px;
+    font-size: 12px;
+    color: var(--text-muted);
+    z-index: 100;
+    display: flex; gap: 16px;
+  }
+  .nav-hint kbd {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+
+  /* ── Typography ── */
+  h1 {
+    font-size: clamp(2.5rem, 5vw, 4.5rem);
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    margin-bottom: 24px;
+  }
+
+  h2 {
+    font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 20px;
+  }
+
+  h3 {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+    color: var(--accent);
+  }
+
+  .subtitle {
+    font-size: clamp(1rem, 2vw, 1.4rem);
+    color: var(--text-secondary);
+    font-weight: 400;
+    max-width: 700px;
+    line-height: 1.6;
+  }
+
+  .gradient-text {
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-2 {
+    background: var(--gradient-2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* ── Cards & Containers ── */
+  .content-grid {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px;
+  }
+
+  .content-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+  .content-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .content-grid.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    border-color: var(--accent);
+    box-shadow: 0 0 30px var(--accent-glow);
+    transform: translateY(-2px);
+  }
+
+  .card.accent-border {
+    border-left: 3px solid var(--accent);
+  }
+
+  .card.green-border {
+    border-left: 3px solid var(--accent-secondary);
+  }
+
+  .card.warn-border {
+    border-left: 3px solid var(--accent-warn);
+  }
+
+  .card.yellow-border {
+    border-left: 3px solid var(--accent-yellow);
+  }
+
+  .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--accent);
+    margin-bottom: 8px;
+  }
+
+  .card p, .bullet-list li {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+  }
+
+  .bullet-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .bullet-list li {
+    padding: 6px 0;
+    padding-left: 20px;
+    position: relative;
+  }
+
+  .bullet-list li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 14px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .bullet-list.green li::before { background: var(--accent-secondary); }
+  .bullet-list.warn li::before { background: var(--accent-warn); }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+  }
+
+  th {
+    background: var(--bg-card);
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    border-bottom: 2px solid var(--border);
+  }
+
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+
+  tr:hover td {
+    background: rgba(108, 99, 255, 0.05);
+  }
+
+  tr.highlight td {
+    color: var(--text-primary);
+    font-weight: 600;
+    background: rgba(108, 99, 255, 0.08);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .badge-green { background: rgba(0, 212, 170, 0.15); color: var(--accent-secondary); }
+  .badge-red { background: rgba(255, 107, 107, 0.15); color: var(--accent-warn); }
+  .badge-purple { background: rgba(108, 99, 255, 0.15); color: var(--accent); }
+  .badge-yellow { background: rgba(255, 217, 61, 0.15); color: var(--accent-yellow); }
+
+  /* ── Flow / Diagram ── */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .flow-node {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 22px;
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-align: center;
+    min-width: 120px;
+  }
+
+  .flow-node.opus { border-color: var(--accent); color: var(--accent); }
+  .flow-node.sonnet { border-color: var(--accent-secondary); color: var(--accent-secondary); }
+  .flow-node.haiku { border-color: var(--accent-yellow); color: var(--accent-yellow); }
+  .flow-node.bash { border-color: var(--text-muted); color: var(--text-secondary); }
+
+  .flow-arrow {
+    color: var(--text-muted);
+    font-size: 1.4rem;
+    font-weight: 300;
+  }
+
+  /* ── Code blocks ── */
+  .code-block {
+    background: #0d0d14;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    white-space: pre;
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  .code-block .keyword { color: var(--accent); }
+  .code-block .string { color: var(--accent-secondary); }
+  .code-block .comment { color: var(--text-muted); font-style: italic; }
+  .code-block .signal { color: var(--accent-yellow); font-weight: 600; }
+
+  /* ── Stats / Metrics ── */
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .stat-box {
+    text-align: center;
+    padding: 28px 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    min-width: 180px;
+  }
+
+  .stat-number {
+    font-size: 2.8rem;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .stat-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  /* ── Chart bars ── */
+  .bar-chart {
+    width: 100%;
+    max-width: 900px;
+  }
+
+  .bar-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 14px;
+    gap: 16px;
+  }
+
+  .bar-label {
+    width: 260px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-align: right;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+  }
+
+  .bar-track {
+    flex: 1;
+    height: 36px;
+    background: var(--bg-card);
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    padding-left: 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    transition: width 1s ease;
+    position: relative;
+  }
+
+  .bar-fill.purple { background: linear-gradient(90deg, #6c63ff, #8b7dff); }
+  .bar-fill.green { background: linear-gradient(90deg, #00d4aa, #00f0c0); color: #0a0a0f; }
+  .bar-fill.red { background: linear-gradient(90deg, #ff6b6b, #ff8e8e); }
+  .bar-fill.yellow { background: linear-gradient(90deg, #ffd93d, #ffe66d); color: #0a0a0f; }
+  .bar-fill.gray { background: linear-gradient(90deg, #555570, #6a6a85); }
+
+  .bar-value {
+    position: absolute;
+    right: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  /* ── Comparison columns ── */
+  .vs-container {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 30px;
+    align-items: start;
+    max-width: 1100px;
+    width: 100%;
+  }
+
+  .vs-divider {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 40px;
+  }
+
+  .vs-badge {
+    background: var(--gradient-2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-size: 2rem;
+    font-weight: 900;
+  }
+
+  .vs-line {
+    width: 2px;
+    height: 300px;
+    background: linear-gradient(to bottom, var(--accent-warn), transparent);
+    margin-top: 12px;
+  }
+
+  /* ── Animated background ── */
+  .bg-glow {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.08;
+    pointer-events: none;
+  }
+
+  /* ── Pipeline diagram ── */
+  .pipeline {
+    display: flex;
+    gap: 2px;
+    align-items: stretch;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .pipeline-stage {
+    flex: 1;
+    padding: 20px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    text-align: center;
+    position: relative;
+  }
+
+  .pipeline-stage:first-child { border-radius: 12px 0 0 12px; }
+  .pipeline-stage:last-child { border-radius: 0 12px 12px 0; }
+
+  .pipeline-stage .stage-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 6px;
+  }
+
+  .pipeline-stage .stage-model {
+    font-size: 0.75rem;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .pipeline-stage::after {
+    content: '\203A';
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 1.2rem;
+    color: var(--text-muted);
+    z-index: 2;
+  }
+
+  .pipeline-stage:last-child::after { content: ''; }
+
+  /* ── State machine ── */
+  .state-machine {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    align-items: center;
+    max-width: 1000px;
+  }
+
+  .state {
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .state.pending { background: rgba(136, 136, 160, 0.15); color: var(--text-secondary); border: 1px solid var(--text-muted); }
+  .state.implementing { background: rgba(108, 99, 255, 0.15); color: var(--accent); border: 1px solid var(--accent); }
+  .state.verifying { background: rgba(255, 217, 61, 0.15); color: var(--accent-yellow); border: 1px solid var(--accent-yellow); }
+  .state.passed { background: rgba(0, 212, 170, 0.15); color: var(--accent-secondary); border: 1px solid var(--accent-secondary); }
+  .state.rejected { background: rgba(255, 107, 107, 0.15); color: var(--accent-warn); border: 1px solid var(--accent-warn); }
+  .state.blocked { background: rgba(255, 107, 107, 0.3); color: var(--accent-warn); border: 2px solid var(--accent-warn); }
+
+  .state-arrow {
+    color: var(--text-muted);
+    font-size: 1.2rem;
+  }
+
+  /* ── Winner indicators ── */
+  .winner-icon {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    background: var(--accent-secondary);
+    border-radius: 50%;
+    text-align: center;
+    line-height: 20px;
+    font-size: 12px;
+    color: var(--bg-dark);
+    font-weight: 800;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* ── Scrollable content ── */
+  .slide-scroll {
+    overflow-y: auto;
+    max-height: calc(100vh - 120px);
+    width: 100%;
+    max-width: 1200px;
+    padding-right: 10px;
+  }
+
+  .slide-scroll::-webkit-scrollbar { width: 4px; }
+  .slide-scroll::-webkit-scrollbar-track { background: transparent; }
+  .slide-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  /* ── Tag ── */
+  .tag {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+
+  .tag-purple { background: rgba(108,99,255,0.15); color: var(--accent); }
+  .tag-green { background: rgba(0,212,170,0.15); color: var(--accent-secondary); }
+
+  /* ── Savings highlight ── */
+  .savings-callout {
+    background: linear-gradient(135deg, rgba(0,212,170,0.1), rgba(108,99,255,0.1));
+    border: 1px solid rgba(0,212,170,0.3);
+    border-radius: 16px;
+    padding: 32px;
+    text-align: center;
+    max-width: 700px;
+    margin: 24px auto 0;
+  }
+
+  .savings-callout .big-number {
+    font-size: 4rem;
+    font-weight: 900;
+    background: var(--gradient-1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    line-height: 1;
+  }
+
+  /* ── Animation for slide entry ── */
+  .slide.active .animate-in {
+    animation: fadeSlideUp 0.6s ease forwards;
+  }
+
+  .slide.active .animate-in.d1 { animation-delay: 0.1s; }
+  .slide.active .animate-in.d2 { animation-delay: 0.2s; }
+  .slide.active .animate-in.d3 { animation-delay: 0.3s; }
+  .slide.active .animate-in.d4 { animation-delay: 0.4s; }
+  .slide.active .animate-in.d5 { animation-delay: 0.5s; }
+
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-in { opacity: 0; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .slide { padding: 30px 24px; }
+    .content-grid.cols-2, .content-grid.cols-3, .content-grid.cols-4 {
+      grid-template-columns: 1fr;
+    }
+    .vs-container { grid-template-columns: 1fr; }
+    .vs-divider { flex-direction: row; padding-top: 0; }
+    .vs-line { width: 100%; height: 2px; }
+    .pipeline { flex-direction: column; }
+    .bar-label { width: 140px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="counter" id="counter"></div>
+<div class="nav-hint">
+  <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate</span>
+  <span><kbd>f</kbd> fullscreen</span>
+</div>
+
+<div class="deck" id="deck">
+
+  <!-- ======================= SLIDE 0: TITLE ======================= -->
+  <div class="slide active">
+    <div class="bg-glow" style="width:600px;height:600px;background:var(--accent);top:-200px;right:-100px;"></div>
+    <div class="bg-glow" style="width:400px;height:400px;background:var(--accent-secondary);bottom:-150px;left:-100px;"></div>
+    <h1 class="animate-in" style="text-align:center;">
+      <span class="gradient-text">Sugar Rush</span>
+    </h1>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:32px;">
+      Autonomous orchestration of AI agents with Raft-inspired consensus verification
+    </p>
+    <div class="stat-row animate-in d2">
+      <div class="stat-box">
+        <div class="stat-number gradient-text">75%</div>
+        <div class="stat-label">Cost Reduction</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-number" style="color:var(--accent-secondary)">3x</div>
+        <div class="stat-label">Verification Agents</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-number" style="color:var(--accent-yellow)">0</div>
+        <div class="stat-label">Humans in the Loop</div>
+      </div>
+    </div>
+    <p class="animate-in d3" style="color:var(--text-muted);margin-top:32px;font-size:0.9rem;">Kevin &ldquo;Sucre&rdquo; Cando</p>
+  </div>
+
+  <!-- ======================= SLIDE 1: THE PROBLEM ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">The <span class="gradient-text-2">Problem</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:36px;">
+      My wife's company had a performance issue &mdash; an <strong style="color:var(--accent-warn)">8,000-line Angular canvas component</strong>.
+    </p>
+    <div class="content-grid cols-3 animate-in d2" style="max-width:1000px;">
+      <div class="card warn-border">
+        <div class="card-label" style="color:var(--accent-warn)">Challenge 1</div>
+        <h3 style="color:var(--text-primary);font-size:1.1rem;">Budget</h3>
+        <p>How to do a massive refactor on a normal Claude account without blowing through usage?</p>
+      </div>
+      <div class="card warn-border">
+        <div class="card-label" style="color:var(--accent-warn)">Challenge 2</div>
+        <h3 style="color:var(--text-primary);font-size:1.1rem;">Quality</h3>
+        <p>This is the main feature of the application. Can't compromise it during refactoring.</p>
+      </div>
+      <div class="card warn-border">
+        <div class="card-label" style="color:var(--accent-warn)">Challenge 3</div>
+        <h3 style="color:var(--text-primary);font-size:1.1rem;">Scale</h3>
+        <p>Multiple components, subfeatures, and dependencies. Too big for a single agent.</p>
+      </div>
+    </div>
+    <div class="card animate-in d3" style="max-width:1000px;margin-top:24px;background:rgba(255,107,107,0.05);border-color:rgba(255,107,107,0.2);">
+      <h3 style="color:var(--accent-warn);font-size:1rem;">Tried Superpowers first &mdash; hit walls:</h3>
+      <ul class="bullet-list warn" style="margin-top:8px;">
+        <li>Ran out of normal usage extremely fast</li>
+        <li>Needed constant hand-holding &mdash; each small refactor required validation & reiteration</li>
+        <li>Large subfeatures weren't being refactored; agent took safe/secure routes</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 2: THE SOLUTION ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">The <span class="gradient-text">Solution</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:28px;">
+      Instead of one huge agent, split the work across <strong>specialized, tiered agents</strong> with consensus checks.
+    </p>
+    <div class="pipeline animate-in d2">
+      <div class="pipeline-stage" style="border-top:3px solid var(--accent);">
+        <div class="stage-name">Planning</div>
+        <div class="stage-model" style="color:var(--accent);">Opus</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Understand, refine, split</div>
+      </div>
+      <div class="pipeline-stage" style="border-top:3px solid var(--accent-yellow);">
+        <div class="stage-name">Task Setup</div>
+        <div class="stage-model" style="color:var(--accent-yellow);">Haiku</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Git worktrees, scaffold</div>
+      </div>
+      <div class="pipeline-stage" style="border-top:3px solid var(--accent);">
+        <div class="stage-name">Analysis</div>
+        <div class="stage-model" style="color:var(--accent);">Opus</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Deps, critical path</div>
+      </div>
+      <div class="pipeline-stage" style="border-top:3px solid var(--accent-secondary);">
+        <div class="stage-name">Execution</div>
+        <div class="stage-model" style="color:var(--accent-secondary);">Sonnet</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Ralph loop + TDD</div>
+      </div>
+      <div class="pipeline-stage" style="border-top:3px solid var(--accent-yellow);">
+        <div class="stage-name">Verify</div>
+        <div class="stage-model" style="color:var(--accent-yellow);">Haiku &times;3</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Quorum consensus</div>
+      </div>
+      <div class="pipeline-stage" style="border-top:3px solid var(--accent);">
+        <div class="stage-name">Merge</div>
+        <div class="stage-model" style="color:var(--accent);">Opus</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);margin-top:6px;">Conflict resolution</div>
+      </div>
+    </div>
+    <div class="content-grid cols-2 animate-in d3" style="max-width:900px;margin-top:28px;">
+      <div class="card green-border">
+        <h3 style="font-size:1rem;">Key Insight</h3>
+        <p>The better the <code style="color:var(--accent);">prd.json</code> stories, the <strong>dumber</strong> the execution model can be. Invest in planning, save on execution.</p>
+      </div>
+      <div class="card accent-border">
+        <h3 style="font-size:1rem;">Isolation</h3>
+        <p>Each feature runs in its own <strong>git worktree</strong>. Changes are isolated. Phases run in <strong>parallel as OS processes</strong>.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 3: THE CONSENSUS LOOP ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">The <span class="gradient-text">Consensus Loop</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:28px;">Raft-inspired verification: no agent is judge, jury, and executioner.</p>
+
+    <div style="max-width:1000px;width:100%;" class="animate-in d2">
+      <!-- Implement -->
+      <div style="display:flex;gap:20px;align-items:center;margin-bottom:16px;">
+        <div class="flow-node sonnet" style="min-width:200px;">
+          <div style="font-size:0.7rem;opacity:0.7;margin-bottom:4px;">IMPLEMENT</div>
+          Sonnet (Leader)
+        </div>
+        <div style="flex:1;padding:12px 20px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary);">
+          Picks next <code>pending</code> story from prd.json &rarr; implements with TDD &rarr; commits &rarr; outputs <span style="color:var(--accent-yellow);font-weight:600;">STORY_IMPLEMENTED:US-003</span>
+        </div>
+      </div>
+      <!-- Verify -->
+      <div style="display:flex;gap:20px;align-items:center;margin-bottom:16px;">
+        <div class="flow-node haiku" style="min-width:200px;">
+          <div style="font-size:0.7rem;opacity:0.7;margin-bottom:4px;">VERIFY &times;3 (parallel)</div>
+          Haiku (Followers)
+        </div>
+        <div style="flex:1;padding:12px 20px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary);">
+          Each independently: check acceptance criteria against <strong>actual code</strong> (not commit msg) &rarr; run quality checks &rarr; cast <span style="color:var(--accent-secondary);font-weight:600;">VOTE:PASS</span> or <span style="color:var(--accent-warn);font-weight:600;">VOTE:FAIL:{reason}</span>
+        </div>
+      </div>
+      <!-- Tally -->
+      <div style="display:flex;gap:20px;align-items:center;margin-bottom:16px;">
+        <div class="flow-node bash" style="min-width:200px;">
+          <div style="font-size:0.7rem;opacity:0.7;margin-bottom:4px;">TALLY</div>
+          Bash (deterministic)
+        </div>
+        <div style="flex:1;padding:12px 20px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary);">
+          2/3 PASS &rarr; <span class="badge badge-green">committed</span> &nbsp;|&nbsp; 2/3 FAIL &rarr; <span class="badge badge-red">rejected + feedback</span> &nbsp;|&nbsp; Tie &rarr; <span class="badge badge-purple">Opus tiebreaker</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="animate-in d3" style="margin-top:20px;">
+      <h3 style="font-size:0.95rem;text-align:center;">State Machine</h3>
+      <div class="state-machine" style="margin-top:10px;">
+        <span class="state pending">pending</span>
+        <span class="state-arrow">&rarr;</span>
+        <span class="state implementing">implementing</span>
+        <span class="state-arrow">&rarr;</span>
+        <span class="state verifying">verifying</span>
+        <span class="state-arrow">&rarr;</span>
+        <span class="state passed">passed</span>
+        <span style="color:var(--text-muted);margin:0 8px;">or</span>
+        <span class="state rejected">rejected</span>
+        <span class="state-arrow">&rarr;</span>
+        <span style="font-size:0.8rem;color:var(--text-muted);">retry up to 3x &rarr;</span>
+        <span class="state blocked">blocked</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 4: RAFT SAFETY ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Raft Safety <span class="gradient-text">Properties</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:28px;">Distributed consensus principles applied to AI agent orchestration.</p>
+    <div class="content-grid cols-2 animate-in d2" style="max-width:1050px;">
+      <div class="card accent-border">
+        <h3 style="font-size:0.95rem;">Election Restriction &rarr; Quality Gate</h3>
+        <p>Agent must have latest <code>git pull</code> before implementing. No stale code.</p>
+      </div>
+      <div class="card green-border">
+        <h3 style="font-size:0.95rem;color:var(--accent-secondary);">Current-Term Commits &rarr; No Stale Approvals</h3>
+        <p>Votes only count from the <strong>current term</strong>. Code change invalidates all prior votes.</p>
+      </div>
+      <div class="card yellow-border">
+        <h3 style="font-size:0.95rem;color:var(--accent-yellow);">Majority Quorum &rarr; Byzantine Tolerance</h3>
+        <p>With 3 verifiers, 1 can hallucinate "PASS" and you still catch it. <strong>Cheaper than making one agent smarter.</strong></p>
+      </div>
+      <div class="card warn-border">
+        <h3 style="font-size:0.95rem;color:var(--accent-warn);">nextIndex Backtracking &rarr; Structured Retry</h3>
+        <p>FAIL reasons feed into next attempt. No blind retry &mdash; implementer reads <em>exactly why</em> it was rejected.</p>
+      </div>
+    </div>
+    <div class="card animate-in d3" style="max-width:1050px;margin-top:20px;">
+      <h3 style="font-size:0.95rem;">Split Brain Prevention &rarr; No Conflicting States</h3>
+      <p>One leader implements at a time. Verifiers only verify current term. No race conditions on <code style="color:var(--accent);">prd.json</code>. We take the <strong>consensus &amp; commit protocol</strong> from Raft, not the distributed infrastructure.</p>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 5: COST PER STORY ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Cost <span class="gradient-text">Per Story</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:28px;">Verification is read-only &mdash; verifiers don't generate code, they read a diff. Haiku is perfect.</p>
+
+    <div class="animate-in d2" style="max-width:900px;width:100%;">
+      <table>
+        <thead>
+          <tr>
+            <th>Component</th>
+            <th>Model</th>
+            <th>Tokens (~)</th>
+            <th>Cost / Story</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Implementer</td>
+            <td><span class="badge badge-green">Sonnet</span></td>
+            <td>~50K</td>
+            <td>$0.90</td>
+          </tr>
+          <tr>
+            <td>Verifier &times;3</td>
+            <td><span class="badge badge-yellow">Haiku</span></td>
+            <td>~15K each</td>
+            <td>$0.07 each</td>
+          </tr>
+          <tr class="highlight">
+            <td><strong>Total per story</strong></td>
+            <td></td>
+            <td></td>
+            <td><strong style="color:var(--accent-secondary);">$1.11</strong></td>
+          </tr>
+          <tr>
+            <td>Opus solo (no consensus)</td>
+            <td><span class="badge badge-purple">Opus</span></td>
+            <td>~50K</td>
+            <td><strong style="color:var(--accent-warn);">$4.50</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="savings-callout animate-in d3">
+      <div style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:8px;">Adversarial review at</div>
+      <div class="big-number">25%</div>
+      <div style="font-size:0.9rem;color:var(--text-secondary);margin-top:8px;">of Opus solo cost &mdash; with <strong style="color:var(--accent-secondary);">higher quality</strong> because 3 independent agents are harder to fool than 1</div>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 6: COST AT SCALE (1000 stories) ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Cost at Scale: <span class="gradient-text">1,000 Stories</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:24px;">Extrapolating per-story costs to enterprise-scale execution.</p>
+
+    <div class="bar-chart animate-in d2">
+      <div class="bar-row">
+        <div class="bar-label">All Opus, no consensus</div>
+        <div class="bar-track">
+          <div class="bar-fill purple" style="width:100%;">
+            <span class="bar-value">$4,500</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Sonnet + Sonnet consensus</div>
+        <div class="bar-track">
+          <div class="bar-fill gray" style="width:80%;">
+            <span class="bar-value">$3,600</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label" style="color:var(--accent-secondary);font-weight:700;">Sonnet + Haiku consensus</div>
+        <div class="bar-track">
+          <div class="bar-fill green" style="width:24.7%;">
+            <span class="bar-value" style="color:#0a0a0f;">$1,110</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Haiku + Haiku consensus</div>
+        <div class="bar-track">
+          <div class="bar-fill yellow" style="width:7.1%;">
+            <span class="bar-value" style="color:#0a0a0f;">$320</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-grid cols-2 animate-in d3" style="max-width:900px;margin-top:24px;">
+      <div class="card green-border">
+        <h3 style="font-size:1rem;color:var(--accent-secondary);">Sweet Spot</h3>
+        <p>Sonnet + Haiku consensus: <strong style="color:var(--accent-secondary);">$1,110</strong> for 1,000 stories vs <strong style="color:var(--accent-warn);">$4,500</strong> Opus solo.</p>
+        <p style="margin-top:8px;"><strong style="color:var(--accent-secondary);">Saves $3,390</strong> &mdash; 75% cheaper with <em>higher</em> quality.</p>
+      </div>
+      <div class="card accent-border">
+        <h3 style="font-size:1rem;">With Planning Overhead</h3>
+        <table style="font-size:0.8rem;margin-top:8px;">
+          <tr><td style="padding:4px 8px;">All Opus (plan+exec)</td><td style="padding:4px 8px;text-align:right;color:var(--accent-warn);">$13,500</td></tr>
+          <tr><td style="padding:4px 8px;">Tiered (Opus plan + Sonnet exec)</td><td style="padding:4px 8px;text-align:right;">$6,300</td></tr>
+          <tr class="highlight"><td style="padding:4px 8px;">Tiered + Haiku consensus</td><td style="padding:4px 8px;text-align:right;color:var(--accent-secondary);">$3,300</td></tr>
+          <tr><td style="padding:4px 8px;">All Haiku</td><td style="padding:4px 8px;text-align:right;">$1,100</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 7: PERFORMANCE COMPARISON ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Performance <span class="gradient-text">Comparison</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:24px;">
+      Sugar Rush (orchestration-skills) vs Superpowers &mdash; head-to-head on 1,000 stories.
+    </p>
+
+    <div class="slide-scroll animate-in d2">
+      <table style="max-width:1100px;margin:0 auto;">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Superpowers (Opus)</th>
+            <th>Sugar Rush (Tiered)</th>
+            <th>Delta</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Cost / 1,000 stories</strong></td>
+            <td style="color:var(--accent-warn);">~$13,500</td>
+            <td style="color:var(--accent-secondary);">~$3,300</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>75% cheaper</span></td>
+          </tr>
+          <tr>
+            <td><strong>Human Involvement</strong></td>
+            <td>Every task dispatch</td>
+            <td>Plan approval only</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>~95% less</span></td>
+          </tr>
+          <tr>
+            <td><strong>Autonomous Execution</strong></td>
+            <td><span class="badge badge-red">No</span> &mdash; manual dispatch</td>
+            <td><span class="badge badge-green">Yes</span> &mdash; runs overnight</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Unattended</span></td>
+          </tr>
+          <tr>
+            <td><strong>Parallelism</strong></td>
+            <td>Theoretical (manual)</td>
+            <td>Real OS processes + jitter</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>True parallel</span></td>
+          </tr>
+          <tr>
+            <td><strong>Verification</strong></td>
+            <td>1 reviewer (manual dispatch)</td>
+            <td>3 independent verifiers (auto)</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>3x coverage</span></td>
+          </tr>
+          <tr>
+            <td><strong>Failure Recovery</strong></td>
+            <td>Manual retry, no memory</td>
+            <td>Snapshot rollback + failure_log.json</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Structured</span></td>
+          </tr>
+          <tr>
+            <td><strong>Cross-session Learning</strong></td>
+            <td>None &mdash; fresh every session</td>
+            <td>patterns.json persists across iterations</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Learning</span></td>
+          </tr>
+          <tr>
+            <td><strong>State Tracking</strong></td>
+            <td>Markdown checkboxes</td>
+            <td>Machine-readable prd.json + dashboard</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Structured</span></td>
+          </tr>
+          <tr>
+            <td><strong>Model Management</strong></td>
+            <td>None</td>
+            <td>Auto-escalation/de-escalation</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Adaptive</span></td>
+          </tr>
+          <tr>
+            <td><strong>Audit Trail</strong></td>
+            <td>None (context lost)</td>
+            <td>Every vote in prd.json + rejection_log</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Full audit</span></td>
+          </tr>
+          <tr>
+            <td><strong>Platforms Supported</strong></td>
+            <td style="color:var(--accent-secondary);">6+</td>
+            <td>2</td>
+            <td><span class="badge badge-red">Superpowers wins</span></td>
+          </tr>
+          <tr>
+            <td><strong>Skill Count</strong></td>
+            <td style="color:var(--accent-secondary);">14</td>
+            <td>6</td>
+            <td><span class="badge badge-red">Superpowers wins</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 8: THROUGHPUT & TIME ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Throughput <span class="gradient-text">&amp; Time</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:28px;">
+      Estimated wall-clock time to complete 1,000 user stories.
+    </p>
+    <div class="content-grid cols-3 animate-in d2" style="max-width:1050px;">
+      <div class="card" style="text-align:center;border-top:3px solid var(--accent-warn);">
+        <div class="card-label" style="color:var(--accent-warn);">Superpowers</div>
+        <div class="stat-number" style="font-size:2.2rem;color:var(--accent-warn);margin:16px 0;">~500 hrs</div>
+        <p style="font-size:0.8rem;">Sequential, human-gated<br>~30 min/story (with hand-holding)</p>
+        <div style="margin-top:12px;">
+          <span class="tag" style="background:rgba(255,107,107,0.12);color:var(--accent-warn);">1 story at a time</span>
+          <span class="tag" style="background:rgba(255,107,107,0.12);color:var(--accent-warn);">human bottleneck</span>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;border-top:3px solid var(--accent);">
+        <div class="card-label">Sugar Rush (sequential)</div>
+        <div class="stat-number" style="font-size:2.2rem;margin:16px 0;" class="gradient-text">~83 hrs</div>
+        <p style="font-size:0.8rem;">Autonomous, no human needed<br>~5 min/story (impl + verify + tally)</p>
+        <div style="margin-top:12px;">
+          <span class="tag tag-purple">unattended</span>
+          <span class="tag tag-purple">auto-retry</span>
+        </div>
+      </div>
+      <div class="card" style="text-align:center;border-top:3px solid var(--accent-secondary);">
+        <div class="card-label" style="color:var(--accent-secondary);">Sugar Rush (parallel)</div>
+        <div class="stat-number" style="font-size:2.2rem;color:var(--accent-secondary);margin:16px 0;">~21 hrs</div>
+        <p style="font-size:0.8rem;">4 parallel worktrees<br>~5 min/story, 4x throughput</p>
+        <div style="margin-top:12px;">
+          <span class="tag tag-green">parallel worktrees</span>
+          <span class="tag tag-green">overnight run</span>
+        </div>
+      </div>
+    </div>
+    <div class="bar-chart animate-in d3" style="margin-top:28px;max-width:800px;">
+      <div class="bar-row">
+        <div class="bar-label">Superpowers</div>
+        <div class="bar-track">
+          <div class="bar-fill red" style="width:100%;">
+            <span class="bar-value">500 hrs</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Sugar Rush (seq)</div>
+        <div class="bar-track">
+          <div class="bar-fill purple" style="width:16.6%;">
+            <span class="bar-value">83 hrs</span>
+          </div>
+        </div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label" style="color:var(--accent-secondary);font-weight:700;">Sugar Rush (parallel)</div>
+        <div class="bar-track">
+          <div class="bar-fill green" style="width:4.2%;">
+            <span class="bar-value" style="right:-55px;color:var(--accent-secondary);">21 hrs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 9: THE VIRTUOUS CYCLE ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">The Virtuous <span class="gradient-text">Cycle</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:36px;">Investment in planning quality creates a compounding advantage.</p>
+
+    <div class="animate-in d2" style="max-width:700px;width:100%;">
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="flow-node opus" style="flex:1;">Better planning <span style="opacity:0.6;">(Opus)</span></div>
+        </div>
+        <div style="text-align:center;color:var(--text-muted);font-size:1.2rem;">&darr;</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="flow-node" style="flex:1;border-color:var(--accent-secondary);color:var(--accent-secondary);">Clearer, more precise stories in prd.json</div>
+        </div>
+        <div style="text-align:center;color:var(--text-muted);font-size:1.2rem;">&darr;</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="flow-node haiku" style="flex:1;">Cheaper model follows them reliably</div>
+        </div>
+        <div style="text-align:center;color:var(--text-muted);font-size:1.2rem;">&darr;</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="flow-node" style="flex:1;border-color:var(--accent-secondary);color:var(--accent-secondary);">More budget available for planning</div>
+        </div>
+        <div style="text-align:center;color:var(--text-muted);font-size:1.2rem;">&darr;</div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div class="flow-node opus" style="flex:1;">Even better stories &rarr; Even cheaper execution</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card animate-in d3" style="max-width:700px;margin-top:28px;text-align:center;background:rgba(108,99,255,0.05);border-color:rgba(108,99,255,0.2);">
+      <p style="font-size:1rem;color:var(--text-primary);">
+        <strong>Structural advantage that compounds over time.</strong><br>
+        <span style="color:var(--text-secondary);">The marginal cost of adding one more story drops as story quality improves.</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 10: WHY SUPERPOWERS CAN'T ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Why Superpowers <span class="gradient-text-2">Can't Do This</span></h2>
+
+    <div class="content-grid cols-2 animate-in d1" style="max-width:1050px;margin-top:20px;">
+      <div class="card warn-border">
+        <h3 style="color:var(--accent-warn);font-size:0.95rem;">No Automation</h3>
+        <p>Human must manually choose the model for each subagent dispatch. Sugar Rush automates model selection per phase.</p>
+      </div>
+      <div class="card warn-border">
+        <h3 style="color:var(--accent-warn);font-size:0.95rem;">No Escalation Logic</h3>
+        <p>If a cheap model fails, the human must notice and re-dispatch. Our loop detects failures and auto-escalates to Opus.</p>
+      </div>
+      <div class="card warn-border">
+        <h3 style="color:var(--accent-warn);font-size:0.95rem;">No Structured Stories</h3>
+        <p>Plans are prose &mdash; cheap models have more room to misinterpret. Our <code>prd.json</code> is machine-readable with clear acceptance criteria.</p>
+      </div>
+      <div class="card warn-border">
+        <h3 style="color:var(--accent-warn);font-size:0.95rem;">No Loop</h3>
+        <p>Each task is one-shot dispatch. No mechanism to retry with a bigger model. Sugar Rush retries with structured feedback automatically.</p>
+      </div>
+    </div>
+
+    <div class="card animate-in d2" style="max-width:1050px;margin-top:20px;text-align:center;background:rgba(0,212,170,0.05);border-color:rgba(0,212,170,0.2);">
+      <p style="font-size:1rem;">
+        <strong style="color:var(--accent-secondary);">Superpowers cannot &ldquo;leave it running overnight.&rdquo;</strong><br>
+        <span style="color:var(--text-secondary);">Sugar Rush can &mdash; and will come back with 100 verified, committed stories.</span>
+      </p>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 11: CONFIGURATIONS TABLE ======================= -->
+  <div class="slide">
+    <h2 class="animate-in">Model <span class="gradient-text">Configurations</span></h2>
+    <p class="subtitle animate-in d1" style="text-align:center;margin-bottom:24px;">Mix and match models for your budget and quality requirements.</p>
+
+    <div class="animate-in d2" style="max-width:1000px;width:100%;">
+      <table>
+        <thead>
+          <tr>
+            <th>Configuration</th>
+            <th>Impl</th>
+            <th>Verify</th>
+            <th>$/Story</th>
+            <th>1,000 Stories</th>
+            <th>Quality</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Opus solo (no consensus)</td>
+            <td><span class="badge badge-purple">Opus</span></td>
+            <td>&mdash;</td>
+            <td>$4.50</td>
+            <td style="color:var(--accent-warn);">$4,500</td>
+            <td>Medium-High <span style="font-size:0.75rem;color:var(--text-muted);">(self-assessed)</span></td>
+          </tr>
+          <tr>
+            <td>Premium consensus</td>
+            <td><span class="badge badge-purple">Opus</span></td>
+            <td><span class="badge badge-green">Sonnet &times;3</span></td>
+            <td>$7.20</td>
+            <td style="color:var(--accent-warn);">$7,200</td>
+            <td><strong>Highest</strong></td>
+          </tr>
+          <tr>
+            <td>Balanced consensus</td>
+            <td><span class="badge badge-green">Sonnet</span></td>
+            <td><span class="badge badge-green">Sonnet &times;3</span></td>
+            <td>$3.60</td>
+            <td>$3,600</td>
+            <td>Very High</td>
+          </tr>
+          <tr class="highlight">
+            <td><span class="winner-icon">&#9733;</span> <strong>Budget consensus</strong></td>
+            <td><span class="badge badge-green">Sonnet</span></td>
+            <td><span class="badge badge-yellow">Haiku &times;3</span></td>
+            <td><strong>$1.11</strong></td>
+            <td><strong style="color:var(--accent-secondary);">$1,110</strong></td>
+            <td><strong>High</strong> <span style="font-size:0.75rem;color:var(--accent-secondary);">(quorum-verified)</span></td>
+          </tr>
+          <tr>
+            <td>Ultra-cheap</td>
+            <td><span class="badge badge-yellow">Haiku</span></td>
+            <td><span class="badge badge-yellow">Haiku &times;3</span></td>
+            <td>$0.32</td>
+            <td style="color:var(--accent-secondary);">$320</td>
+            <td>Medium <span style="font-size:0.75rem;color:var(--text-muted);">(cheap but fragile)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="savings-callout animate-in d3" style="margin-top:24px;">
+      <div style="font-size:0.9rem;color:var(--text-secondary);margin-bottom:4px;">The sweet spot &mdash; Budget Consensus saves</div>
+      <div class="big-number">$3,390</div>
+      <div style="font-size:0.9rem;color:var(--text-secondary);margin-top:4px;">per 1,000 stories vs Opus solo &mdash; that's <strong style="color:var(--accent-secondary);">75% savings</strong> with <em>higher</em> verified quality</div>
+    </div>
+  </div>
+
+  <!-- ======================= SLIDE 12: KEY TAKEAWAYS ======================= -->
+  <div class="slide">
+    <div class="bg-glow" style="width:500px;height:500px;background:var(--accent);bottom:-200px;left:-100px;"></div>
+    <div class="bg-glow" style="width:400px;height:400px;background:var(--accent-secondary);top:-150px;right:-100px;"></div>
+
+    <h2 class="animate-in" style="text-align:center;">
+      <span class="gradient-text">Key Takeaways</span>
+    </h2>
+
+    <div class="content-grid cols-2 animate-in d1" style="max-width:900px;margin-top:24px;">
+      <div class="card green-border" style="padding:24px;">
+        <div style="font-size:2rem;margin-bottom:8px;">1</div>
+        <h3 style="color:var(--accent-secondary);font-size:1rem;">Don't make one agent smarter &mdash; make many agents verify.</h3>
+        <p>3 cheap verifiers beat 1 expensive self-assessor.</p>
+      </div>
+      <div class="card accent-border" style="padding:24px;">
+        <div style="font-size:2rem;margin-bottom:8px;">2</div>
+        <h3 style="font-size:1rem;">Invest in planning, save on execution.</h3>
+        <p>Opus writes the recipe. Sonnet follows it. Haiku checks it. Everyone wins.</p>
+      </div>
+      <div class="card yellow-border" style="padding:24px;">
+        <div style="font-size:2rem;margin-bottom:8px;">3</div>
+        <h3 style="color:var(--accent-yellow);font-size:1rem;">Structured state beats prose plans.</h3>
+        <p>Machine-readable <code>prd.json</code> enables automation that markdown checklists never can.</p>
+      </div>
+      <div class="card warn-border" style="padding:24px;">
+        <div style="font-size:2rem;margin-bottom:8px;">4</div>
+        <h3 style="color:var(--accent-warn);font-size:1rem;">True autonomy = leave it running overnight.</h3>
+        <p>Wake up to 100 verified, committed stories. No human in the loop.</p>
+      </div>
+    </div>
+
+    <div class="stat-row animate-in d2" style="margin-top:36px;">
+      <div class="stat-box" style="border-color:var(--accent-secondary);">
+        <div class="stat-number" style="color:var(--accent-secondary);">75%</div>
+        <div class="stat-label">Cost Savings</div>
+      </div>
+      <div class="stat-box" style="border-color:var(--accent);">
+        <div class="stat-number gradient-text">24x</div>
+        <div class="stat-label">Faster (parallel)</div>
+      </div>
+      <div class="stat-box" style="border-color:var(--accent-yellow);">
+        <div class="stat-number" style="color:var(--accent-yellow);">3x</div>
+        <div class="stat-label">Verification Coverage</div>
+      </div>
+    </div>
+
+    <p class="animate-in d3" style="margin-top:36px;text-align:center;color:var(--text-muted);font-size:1.1rem;">
+      <strong style="color:var(--text-primary);">Sugar Rush</strong> &mdash; Autonomous orchestration with consensus verification
+    </p>
+    <p class="animate-in d4" style="text-align:center;color:var(--text-muted);font-size:0.9rem;margin-top:8px;">
+      Kevin &ldquo;Sucre&rdquo; Cando &bull; github.com/orchestration-skills
+    </p>
+  </div>
+
+</div>
+
+<script>
+  const deck = document.getElementById('deck');
+  const slides = deck.querySelectorAll('.slide');
+  const progress = document.getElementById('progress');
+  const counter = document.getElementById('counter');
+  let current = 0;
+
+  function updateSlide(dir) {
+    slides.forEach((s, i) => {
+      s.classList.remove('active', 'prev');
+      if (i < current) s.classList.add('prev');
+    });
+    slides[current].classList.add('active');
+
+    // Reset animations
+    slides[current].querySelectorAll('.animate-in').forEach(el => {
+      el.style.animation = 'none';
+      el.offsetHeight; // trigger reflow
+      el.style.animation = '';
+    });
+
+    const pct = ((current) / (slides.length - 1)) * 100;
+    progress.style.width = pct + '%';
+    counter.textContent = (current + 1) + ' / ' + slides.length;
+  }
+
+  function next() {
+    if (current < slides.length - 1) { current++; updateSlide(1); }
+  }
+
+  function prev() {
+    if (current > 0) { current--; updateSlide(-1); }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') { e.preventDefault(); next(); }
+    if (e.key === 'ArrowLeft' || e.key === 'PageUp') { e.preventDefault(); prev(); }
+    if (e.key === 'Home') { current = 0; updateSlide(0); }
+    if (e.key === 'End') { current = slides.length - 1; updateSlide(0); }
+    if (e.key === 'f') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+
+  // Touch support
+  let touchStartX = 0;
+  document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) { dx < 0 ? next() : prev(); }
+  });
+
+  // Click to advance (right half) or go back (left half)
+  deck.addEventListener('click', (e) => {
+    if (e.target.closest('a, button, input, code, table')) return;
+    e.clientX > window.innerWidth / 2 ? next() : prev();
+  });
+
+  updateSlide(0);
+</script>
+
+</body>
+</html>
