@@ -1,11 +1,11 @@
 {
-  "name": "orchestration-skills",
+  "name": "sugar",
   "owner": {
     "name": "Vector"
   },
   "plugins": [
     {
-      "name": "orchestration-skills",
+      "name": "sugar",
       "source": "./",
       "description": "Phased software engineering execution with PRD-driven implementation. Includes phase orchestration, PRD generation, and Ralph-style autonomous agent loops.",
       "version": "1.0.0"

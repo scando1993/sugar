@@ -1,0 +1,8 @@
+{
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "skill": {
+      "*": "allow"
+    }
+  }
+}

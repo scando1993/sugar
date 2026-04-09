@@ -180,13 +180,13 @@ Step 3 + 4 (launch examples + execution.md — same file, minor edits)
 Step 5 + 6 (sync to Copilot — parallel, different files)
 ```
 
-# Deep Competitive Analysis: orchestration-skills vs obra/superpowers
+# Deep Competitive Analysis: sugar vs obra/superpowers
 
 ---
 
 ## Architecture Comparison
 
-| Dimension | **orchestration-skills** | **obra/superpowers** |
+| Dimension | **sugar** | **obra/superpowers** |
 | --- | --- | --- |
 | **Core pattern** | Ralph loop — autonomous bash-driven iteration, one story per fresh agent spawn, consensus verification via verifier quorum | Subagent dispatch — orchestrator manually dispatches per-task agents with review loops |
 | **State machine** | `prd.json` (6-status consensus lifecycle: pending/implementing/verifying/passed/rejected/blocked) + `progress.txt` + `patterns.json` + git | Plan markdown files + TodoWrite checkboxes + git. No structured state |
@@ -201,7 +201,7 @@ Step 5 + 6 (sync to Copilot — parallel, different files)
 
 ---
 
-## Where orchestration-skills Already Wins
+## Where sugar Already Wins
 
 ### 1. Autonomous execution is the killer feature
 Superpowers requires a human in the loop for every task dispatch. The Ralph loop runs `N` stories unattended — the agent picks the next story, implements, commits, exits, and a fresh instance picks up the next one. This is fundamentally more scalable. Superpowers cannot "leave it running overnight."
@@ -210,7 +210,7 @@ Superpowers requires a human in the loop for every task dispatch. The Ralph loop
 `prd.json` is machine-readable with a 6-status consensus lifecycle: `pending` -> `implementing` -> `verifying` -> `passed`/`rejected`/`blocked`. Each story carries `term`, `votes[]`, and `notes`. Superpowers tracks progress via markdown checkboxes in plan documents — fragile, hard to query, impossible to aggregate programmatically. The `src/index.ts` CLI can validate structure, report status with vote tallies, scan all phases with progress bars, and generate an interactive HTML dashboard. They have nothing equivalent.
 
 ### 3. True parallelism vs theoretical parallelism
-`ralph-loop.sh` processes launch in background with staggered starts and jitter. Superpowers has a `dispatching-parallel-agents` skill but it's a prompt — the human must manually coordinate agents in separate windows. orchestration-skills runs phases concurrently as actual OS processes.
+`ralph-loop.sh` processes launch in background with staggered starts and jitter. Superpowers has a `dispatching-parallel-agents` skill but it's a prompt — the human must manually coordinate agents in separate windows. sugar runs phases concurrently as actual OS processes.
 
 ### 4. Cross-session memory with structured patterns
 `progress.txt` carries "Codebase Patterns" and "Lessons Learned" across iterations. Between execution groups, patterns are extracted into `patterns.json` (structured format with name, description, `applies_to` scope, and example) and injected into the next group's `CLAUDE.md` under a `## Known Patterns` section. Superpowers has zero cross-session learning — every session starts completely fresh.

@@ -1,10 +1,10 @@
-# Deep Competitive Analysis: orchestration-skills vs obra/superpowers
+# Deep Competitive Analysis: sugar vs obra/superpowers
 
 ---
 
 ## Architecture Comparison
 
-| Dimension | **orchestration-skills** | **obra/superpowers** |
+| Dimension | **sugar** | **obra/superpowers** |
 | --- | --- | --- |
 | **Core pattern** | Ralph loop — autonomous bash-driven iteration, one story per fresh agent spawn, consensus verification via verifier quorum | Subagent dispatch — orchestrator manually dispatches per-task agents with review loops |
 | **State machine** | `prd.json` (6-status consensus lifecycle: pending/implementing/verifying/passed/rejected/blocked) + `progress.txt` + `patterns.json` + git | Plan markdown files + TodoWrite checkboxes + git. No structured state |
@@ -12,15 +12,15 @@
 | **Parallelism** | Real — multiple `ralph-loop.sh` processes running simultaneously in background | Conceptual — `dispatching-parallel-agents` skill exists but requires manual orchestration |
 | **Autonomy** | High — loop runs unattended with model tiering, auto-escalation, rollback, and consensus verification | Low — human must initiate each task dispatch, review each result |
 | **Prompt hardening** | Iron laws, rationalization tables, quality protocol, STORY_FAILED escalation | Iron laws, rationalization tables, anti-sycophancy rules, pressure-tested |
-| **Platforms** | 2 (Claude Code, GitHub Copilot) | 6+ (Claude Code, Cursor, Codex, OpenCode, Gemini CLI, Copilot CLI) |
-| **Skill count** | 6 skills (orchestrate, prd, ralph, debug, review, tdd) | 14 skills covering the full dev lifecycle |
+| **Platforms** | 6 (Claude Code, GitHub Copilot, Cursor, Codex, OpenCode, Gemini CLI) | 6+ (Claude Code, Cursor, Codex, OpenCode, Gemini CLI, Copilot CLI) |
+| **Skill count** | 10 skills (orchestrate, prd, ralph, debug, review, tdd, brainstorm, worktree, finish, respond-review) | 14 skills covering the full dev lifecycle |
 | **Model management** | Model tiering with auto-escalation/de-escalation per phase | No model management — uses whatever the user configures |
 | **Session bootstrap** | Skill-on-demand | SessionStart hook injects bootstrap into every session |
 | **Dependencies** | TypeScript CLI for validation + HTML dashboard | Zero — pure markdown/bash |
 
 ---
 
-## Where orchestration-skills Already Wins
+## Where sugar Already Wins
 
 ### 1. Autonomous execution is the killer feature
 Superpowers requires a human in the loop for every task dispatch. The Ralph loop runs `N` stories unattended — the agent picks the next story, implements, commits, exits, and a fresh instance picks up the next one. This is fundamentally more scalable. Superpowers cannot "leave it running overnight."
@@ -29,7 +29,7 @@ Superpowers requires a human in the loop for every task dispatch. The Ralph loop
 `prd.json` is machine-readable with a 6-status consensus lifecycle: `pending` -> `implementing` -> `verifying` -> `passed`/`rejected`/`blocked`. Each story carries `term`, `votes[]`, and `notes`. Superpowers tracks progress via markdown checkboxes in plan documents — fragile, hard to query, impossible to aggregate programmatically. The `src/index.ts` CLI can validate structure, report status with vote tallies, scan all phases with progress bars, and generate an interactive HTML dashboard. They have nothing equivalent.
 
 ### 3. True parallelism vs theoretical parallelism
-`ralph-loop.sh` processes launch in background with staggered starts and jitter. Superpowers has a `dispatching-parallel-agents` skill but it's a prompt — the human must manually coordinate agents in separate windows. orchestration-skills runs phases concurrently as actual OS processes.
+`ralph-loop.sh` processes launch in background with staggered starts and jitter. Superpowers has a `dispatching-parallel-agents` skill but it's a prompt — the human must manually coordinate agents in separate windows. sugar runs phases concurrently as actual OS processes.
 
 ### 4. Cross-session memory with structured patterns
 `progress.txt` carries "Codebase Patterns" and "Lessons Learned" across iterations. Between execution groups, patterns are extracted into `patterns.json` (structured format with name, description, `applies_to` scope, and example) and injected into the next group's `CLAUDE.md` under a `## Known Patterns` section. Superpowers has zero cross-session learning — every session starts completely fresh.
@@ -58,41 +58,39 @@ Before each attempt, a snapshot tag (`attempt-US-001-v1`) is created for clean r
 ~~Our quality gate is "run quality checks" — a single pass with 3 retries before giving up.~~
 **Status: IMPLEMENTED (and surpassed).** We now have consensus verification — a quorum of independent verifier agents that each read the diff, run checks, and cast VOTE:PASS/VOTE:FAIL. This is structurally stronger than their two-pass review because: (a) it runs automatically in the loop, (b) it uses independent agents (not the same one reviewing its own work), and (c) majority voting is more robust than single-reviewer approval. Additionally, the `/review` skill provides standalone adversarial code review with anti-trust protocol.
 
-### 3. The meta-system — skills tested via TDD
-They treat skill creation as RED-GREEN-REFACTOR:
-- **RED**: Run pressure scenarios WITHOUT the skill, record exact agent failures and rationalizations verbatim
-- **GREEN**: Write minimal skill that addresses those failures
-- **REFACTOR**: Find new rationalizations, add counters, re-test
+### ~~3. The meta-system — skills tested via TDD~~ CLOSED
+~~They treat skill creation as RED-GREEN-REFACTOR. Our skills were written top-down from process knowledge, not battle-tested against actual agent failure modes.~~
+**Status: IMPLEMENTED.** We now have a complete pressure-testing framework (`docs/pressure_testing.md`) that applies RED-GREEN-REFACTOR methodology to skills themselves. The framework includes: 7 pressure combos (time, sunk cost, exhaustion, authority, scope creep, ambiguity, conflicting instructions), a standardized test scenario template, combo recipes (e.g., "time + sunk cost"), aggregate metrics tracking per skill, and an example pressure test for the orchestrate skill. Results are tracked in `docs/pressure_test_results/`. The framework is ready for live validation runs.
 
-They stress-test skills with "pressure combos" (time + sunk cost + exhaustion + authority). Our skills were written top-down from process knowledge, not battle-tested against actual agent failure modes.
+### ~~4. Cross-platform reach — 6 platforms vs 2~~ CLOSED
+~~They support 6+ platforms from a single repo. Our dual-platform approach limited adoption.~~
+**Status: IMPLEMENTED.** All 10 skills now ship with adapters for 6 platforms:
+- **Claude Code**: `.claude/skills/<name>/SKILL.md` (native)
+- **GitHub Copilot**: `.github/agents/<name>.md` + `.github/prompts/<name>.prompt.md` (agents + prompt files)
+- **Cursor**: `.cursor/rules/<name>.mdc` (rules with intelligent matching)
+- **Codex**: `.agents/skills/<name>/SKILL.md` (native skill format)
+- **OpenCode**: `.opencode/agents/<name>.md` + native `.claude/skills/` compatibility (zero-config)
+- **Gemini CLI**: `.gemini/skills/<name>.md` + `GEMINI.md` with `@` imports
 
-**Gap remains.** We have the TDD skill for application code, but we haven't applied pressure-testing methodology to the skills themselves. Our rationalization tables were designed from anticipated failure modes, not observed ones.
-
-### 4. Cross-platform reach — 6 platforms vs 2
-They support Claude Code, Cursor, Codex, OpenCode, Gemini CLI, and Copilot CLI from a single repo with platform-specific adapters. Our dual-platform approach (Claude Code + Copilot) limits adoption.
-
-**Gap remains.** We support Claude Code and GitHub Copilot (agents + prompt files). Missing: Cursor, Codex, OpenCode, Gemini CLI.
-
-### ~~5. Lifecycle coverage — they own the full pipeline~~ MOSTLY CLOSED
+### ~~5. Lifecycle coverage — they own the full pipeline~~ CLOSED
 ~~We cover orchestration/execution brilliantly but don't touch design, debugging, review, or TDD.~~
-**Status: MOSTLY CLOSED.** We now have 6 skills:
+**Status: FULLY CLOSED.** We now have 10 skills covering the complete dev lifecycle:
 - `/orchestrate` — phased execution (our core strength)
 - `/prd` — PRD generation (design/planning)
 - `/ralph` — PRD-to-JSON conversion
 - `/debug` — systematic debugging (6 phases + 3-fix iron law)
 - `/review` — adversarial code review (anti-trust + anti-sycophancy)
 - `/tdd` — test-driven development (RED-GREEN-REFACTOR)
+- `/brainstorm` — structured ideation with diverge/converge methodology + interactive HTML companion
+- `/worktree` — git worktree lifecycle management (create, list, switch, sync, cleanup)
+- `/finish` — branch finishing and PR preparation (6-step process)
+- `/respond-review` — receiving and responding to code review feedback
 
-**Remaining lifecycle gaps:**
-- No brainstorming skill (they have `brainstorming-features`)
-- No git worktree management skill (they have `using-worktrees`)
-- No branch finishing/PR skill (they have `finishing-feature-branches`)
-- No "receiving review" skill (they have `receiving-code-review` — guidance for responding to reviewer feedback)
+All lifecycle gaps are closed. Every skill ships on all 6 platforms.
 
-### 6. Visual brainstorming companion
-They ship a zero-dependency Node.js server that renders HTML mockups during design phase — the agent pushes screens, the user clicks choices, events flow back. We have nothing for pre-implementation visualization.
-
-**Gap remains.** We have the HTML dashboard for progress tracking (Phase 3c status), but no interactive design-phase visualization tool.
+### ~~6. Visual brainstorming companion~~ CLOSED
+~~They ship a zero-dependency Node.js server that renders HTML mockups during design phase. We have nothing for pre-implementation visualization.~~
+**Status: IMPLEMENTED.** `orchestrate brainstorm <description>` generates a self-contained interactive HTML file with 4 phases: Diverge (idea input slots with add/remove), Cluster (drag-and-drop grouping into named themes), Evaluate (feasibility/impact/effort sliders with auto-calculated impact/effort ratio), Converge (top 3 picks with description, risks, and next step fields). Zero external dependencies, opens in browser automatically. Paired with the `/brainstorm` skill for structured ideation workflow.
 
 ---
 
@@ -136,22 +134,34 @@ They ship a zero-dependency Node.js server that renders HTML mockups during desi
 
 ## The Bottom Line (Updated)
 
-| Dimension | orchestration-skills | superpowers |
+| Dimension | sugar | superpowers |
 | --- | --- | --- |
-| **Best at** | Autonomous execution, consensus verification, model tiering, structured state, parallelism, scalability | Platform reach, pressure-tested skills, lifecycle breadth, visual brainstorming |
+| **Best at** | Autonomous execution, consensus verification, model tiering, structured state, parallelism, scalability, full lifecycle coverage | Platform reach (marginally), pressure-tested skills (historically) |
 | **Philosophy** | "Let the machine run — with verification" | "Trust but verify (actually, don't trust)" |
-| **Weakness** | 2 platforms; skills not pressure-tested against real failure modes | Can't run unattended; no structured state; no cross-session memory; no model management |
-| **Moat** | Ralph loop + consensus quorum + prd.json state machine + model tiering + pattern propagation | Platform reach + pressure-testing methodology + visual companion |
+| **Weakness** | Skills not yet pressure-tested with live agent runs (framework exists, pending validation) | Can't run unattended; no structured state; no cross-session memory; no model management |
+| **Moat** | Ralph loop + consensus quorum + prd.json state machine + model tiering + pattern propagation + 10 skills × 6 platforms + interactive brainstorm companion | Pressure-testing methodology maturity |
 
-**The prompt hardening gap is closed.** We now have iron laws, rationalization tables, quality protocols, and anti-trust/anti-sycophancy rules across all skills. Our consensus verification (automatic quorum voting) is structurally stronger than their manual two-pass review.
+**The prompt hardening gap is closed.** We now have iron laws, rationalization tables, quality protocols, and anti-trust/anti-sycophancy rules across all 10 skills. Our consensus verification (automatic quorum voting) is structurally stronger than their manual two-pass review.
 
 **The execution advantage has widened.** Model tiering, snapshot rollback, structured failure reports, and pattern propagation are capabilities they cannot replicate without a structured state machine.
 
-## Remaining Gaps (4 items)
+**The platform gap is closed.** All 10 skills ship on 6 platforms: Claude Code, GitHub Copilot (agents + prompts), Cursor, Codex, OpenCode, and Gemini CLI. OpenCode gets zero-config compatibility by natively reading `.claude/skills/`.
+
+**The lifecycle gap is closed.** 10 skills cover the full dev lifecycle: orchestration, PRD generation, PRD conversion, debugging, code review, TDD, brainstorming, worktree management, branch finishing, and review response. Plus an interactive HTML brainstorming companion.
+
+## Remaining Gaps (1 item)
+
+All major gaps are closed. One item remains as ongoing work:
 
 | # | Gap | Effort | Impact |
 | --- | --- | --- | --- |
-| 1 | **Pressure-test skills against real agent failures** — Our rationalization tables are designed from anticipated failures, not observed ones. Run adversarial scenarios, record actual rationalizations, add counters. | Medium | High — would prove skill robustness |
-| 2 | **Cross-platform reach** — Support Cursor, Codex, OpenCode, Gemini CLI. Requires platform-specific adapters. | Medium | Medium — broader adoption |
-| 3 | **Remaining lifecycle skills** — brainstorming, git worktree management, branch finishing/PR, receiving review feedback. | Low each | Low — nice-to-have, not blocking |
-| 4 | **Visual brainstorming companion** — Interactive design-phase tool (HTML mockup server or similar). | High | Low — differentiation but not core to execution |
+| 1 | **Run live pressure tests** — The framework (`docs/pressure_testing.md`) is ready. Run actual agent sessions with pressure combos, record observed rationalizations, and update rationalization tables with empirical data. | Low (per test) | High — would validate skill robustness with real evidence |
+
+### Closed gaps (formerly 4 items)
+
+| # | Former Gap | Status | What was built |
+| --- | --- | --- | --- |
+| ~~1~~ | ~~Pressure-test skills~~ | CLOSED | `docs/pressure_testing.md` — RED-GREEN-REFACTOR methodology for skills, 7 pressure combos, scenario templates, aggregate metrics. Pending live runs. |
+| ~~2~~ | ~~Cross-platform reach~~ | CLOSED | 6 platforms: Claude Code, Copilot, Cursor (`.cursor/rules/*.mdc`), Codex (`.agents/skills/*/SKILL.md`), OpenCode (`.opencode/agents/*.md` + native `.claude/skills/` compat), Gemini CLI (`.gemini/skills/*.md` + `GEMINI.md`). |
+| ~~3~~ | ~~Remaining lifecycle skills~~ | CLOSED | 4 new skills: `/brainstorm` (diverge/converge ideation), `/worktree` (git worktree lifecycle), `/finish` (branch finishing + PR prep), `/respond-review` (receiving code review). Total: 10 skills. |
+| ~~4~~ | ~~Visual brainstorming companion~~ | CLOSED | `orchestrate brainstorm <description>` — interactive HTML with 4 phases: diverge (idea slots), cluster (drag-drop), evaluate (scoring sliders), converge (top picks with risks). |

@@ -373,7 +373,7 @@ The sweet spot is **Sonnet implementer + Haiku verifiers**: 75% cheaper than Opu
 
 ## Competitive Advantage vs Superpowers
 
-| Dimension | superpowers | orchestration-skills + consensus |
+| Dimension | superpowers | sugar + consensus |
 |---|---|---|
 | Review mechanism | Human dispatches reviewer subagent | Automated quorum of verifier agents |
 | Review speed | Minutes (human bottleneck) | Seconds (parallel Haiku) |

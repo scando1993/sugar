@@ -154,7 +154,7 @@ Superpowers recommends model selection ("cheap models for mechanical tasks, capa
 3. **No structured stories** — their plans are prose, so a cheap model has more room to misinterpret
 4. **No loop** — each task is a one-shot dispatch, so there's no mechanism to retry with a bigger model
 
-orchestration-skills automates all four: the loop script controls the model flag, detects failures, escalates automatically, and de-escalates after success.
+sugar automates all four: the loop script controls the model flag, detects failures, escalates automatically, and de-escalates after success.
 
 ---
 

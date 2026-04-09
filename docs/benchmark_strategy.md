@@ -1,4 +1,4 @@
-# Benchmark Strategy: orchestration-skills vs superpowers vs naive Ralph
+# Benchmark Strategy: sugar vs superpowers vs naive Ralph
 
 ---
 
@@ -6,13 +6,13 @@
 
 | # | System | Planning model | Execution model | Description |
 |---|---|---|---|---|
-| **A** | orchestration-skills (full) | Opus | Opus | Full phase workflow: plan → worktrees → prd.json → ralph-loop.sh |
+| **A** | sugar (full) | Opus | Opus | Full phase workflow: plan → worktrees → prd.json → ralph-loop.sh |
 | **B1** | superpowers (auto-approved) | Opus | Opus | Full pipeline: brainstorming → writing-plans → subagent-driven-development. Human responses auto-approved to test pure capability. |
 | **B2** | superpowers (human-assisted) | Opus | Opus | Same as B1 but with a real human operator dispatching and reviewing. Tests whether human-in-the-loop actually improves results. |
 | **C** | naive Ralph | — | Opus | Raw `claude --print` loop with a basic CLAUDE.md and prd.json, no phases, no dependency analysis, no pattern propagation. All-Opus execution (~50K tokens/story × 10 stories × 3 phases = ~1.5M tokens → ~$90). |
-| **D** | orchestration-skills (tiered) | Opus | Sonnet | Same as A but ralph-loop.sh uses Sonnet for execution, Opus for planning only |
-| **E** | orchestration-skills (aggressive) | Opus | Haiku | Same as A but ralph-loop.sh uses Haiku for execution with Opus escalation on 2x failure |
-| **F** | orchestration-skills (adaptive) | Opus | Sonnet + Opus escalation | Same as D but with adaptive escalation: starts Sonnet, auto-escalates to Opus after 2 consecutive failures, de-escalates on success. See [Model Tiering Strategy](model_tiering_strategy.md) §Adaptive Escalation. |
+| **D** | sugar (tiered) | Opus | Sonnet | Same as A but ralph-loop.sh uses Sonnet for execution, Opus for planning only |
+| **E** | sugar (aggressive) | Opus | Haiku | Same as A but ralph-loop.sh uses Haiku for execution with Opus escalation on 2x failure |
+| **F** | sugar (adaptive) | Opus | Sonnet + Opus escalation | Same as D but with adaptive escalation: starts Sonnet, auto-escalates to Opus after 2 consecutive failures, de-escalates on success. See [Model Tiering Strategy](model_tiering_strategy.md) §Adaptive Escalation. |
 
 ### Key Questions
 - **D, E, F vs A:** If tiered execution scores within 90% of A at 20-50% of the cost, the model tiering strategy is validated.

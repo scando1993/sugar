@@ -1,0 +1,132 @@
+---
+description: "Phased software engineering execution for large refactors, migrations, feature work. Use when a task needs isolated workspaces, atomic commits, parallel branches."
+alwaysApply: false
+---
+
+# Phased Software Engineering Execution
+
+## Iron Law
+`NEVER SKIP A PHASE OR CONTINUE WITHOUT EXPLICIT USER APPROVAL`
+
+## Overview
+
+Execute large engineering tasks through strict phases: Planning, Workspace Setup, Dependency Analysis + Parallel Implementation, and Merge. Each phase requires user approval before proceeding.
+
+Use prompt reinforcement at every decision boundary: restate the task, provide context, give the instruction.
+
+---
+
+## Phase 1 -- Planning (No Code)
+
+Goal: Analyze the task and produce a complete execution plan.
+
+Actions:
+- Analyze the task, ask clarifying questions if ambiguous
+- Create `plan.md` at repo root: objective, scope, assumptions, constraints, risks, dependency map, architecture strategy, execution phases, blockers
+- Create `todo.md` at repo root: small actionable tasks grouped by phase, checkbox tracking, dependency annotations, completion criteria
+
+Rules: Do not implement anything. Do not create branches. Stop and wait for approval.
+
+---
+
+## Phase 2 -- Workspace and Branch Setup
+
+Goal: Create an isolated workspace for each execution phase.
+
+Actions:
+- Create worktrees: `git worktree add /tmp/<repo>-phases/<phase-name> -b <branch-name>`
+- Initialize `progress.txt` in each workspace
+- Branch naming: `phase-a-<scope>`, `phase-b-<scope>`, etc.
+
+Rules: One worktree per phase, one branch per phase. Stop and wait for approval.
+
+---
+
+## Phase 3 -- Dependency Analysis + Parallel Implementation
+
+Three sub-phases: 3a, 3b, 3c.
+
+### 3a -- Dependency Analysis
+For each phase determine: what it produces, what it consumes, hard/soft dependencies, independence. Build the dependency graph. Identify parallel groups, sequential chains, critical path.
+
+### 3b -- Generate Execution Artifacts
+- Create `execution.md` at repo root: dependency graph, parallel groups, execution order, critical path, risk assessment
+- Generate `prd.json` in each workspace (Ralph format with user stories)
+- Generate `CLAUDE.md` in each workspace (agent instructions)
+- Generate `ralph-loop.sh` in each workspace (iteration engine)
+- Generate `VERIFY.md` in each workspace (verifier agent)
+
+Story rules: completable in one pass, ordered by dependency, verifiable criteria, always include "Typecheck passes".
+
+### 3c -- Parallel Execution
+- Launch `ralph-loop.sh` for independent phases in parallel
+- Each loop spawns fresh agent instances, one story per iteration
+- Between groups: extract patterns from completed phases, inject into next group
+- Sequential groups wait for dependencies
+
+Model selection: Sonnet (default), Haiku (mechanical tasks), Opus (complex architectural). Auto-escalate to Opus on 2+ consecutive failures.
+
+---
+
+## Phase 4 -- Merge
+
+Goal: Safely integrate all completed phase branches.
+
+Actions:
+- Create `merge_order.md`: merge order by dependency graph, rationale, expected conflicts, resolution notes
+- Merge in documented order, resolve conflicts, validate after each merge
+- Post-merge: full test suite, typecheck, lint. Not complete until all checks pass.
+
+---
+
+## Managed Files
+
+| File | Location | Phase |
+|---|---|---|
+| `plan.md` | repo root | 1 |
+| `todo.md` | repo root | 1 |
+| `execution.md` | repo root | 3b |
+| `prd.json` | each worktree | 3b |
+| `progress.txt` | each worktree | 2 |
+| `CLAUDE.md` | each worktree | 3b |
+| `ralph-loop.sh` | each worktree | 3b |
+| `VERIFY.md` | each worktree | 3b |
+| `patterns.json` | repo root | 3c |
+| `merge_order.md` | repo root | 4 |
+
+---
+
+## Abort and Cleanup
+
+```bash
+git worktree list
+git worktree remove /tmp/<repo>-phases/<phase> --force
+git branch -D <branch>
+git worktree prune
+```
+
+---
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "I'll skip Phase 1 and jump to implementation" | Planning prevents wasted work. Always start with Phase 1. |
+| "These phases can share a branch" | One branch per phase. Isolation prevents merge conflicts. |
+| "I'll launch dependent phases early" | Never launch a phase before its prerequisites complete. |
+| "I don't need to propagate patterns" | Patterns prevent repeated mistakes. Always propagate between groups. |
+| "Tests mostly pass, good enough" | Phase 4 is NOT complete until ALL checks pass. |
+
+---
+
+## How to Interpret User Requests
+
+| User says | Start from |
+|---|---|
+| Planning only / no qualifier | Phase 1 |
+| Planning is approved | Phase 2 |
+| Setup is done | Phase 3 |
+| PRDs exist, ready to implement | Phase 3c |
+| All branches done, wants merge | Phase 4 |
+
+The first deliverable is always Phase 1 planning only, unless the user explicitly states a later phase is approved.

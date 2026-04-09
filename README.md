@@ -132,10 +132,10 @@ No special recovery steps needed.
 
 ```bash
 # Clone into your project or add as a plugin
-git clone https://github.com/<your-org>/orchestration-skills .claude/plugins/orchestration-skills
+git clone https://github.com/<your-org>/sugar .claude/plugins/sugar
 
 # Or copy the skill directly
-cp -r orchestration-skills/.claude/skills/orchestrate .claude/skills/orchestrate
+cp -r sugar/.claude/skills/orchestrate .claude/skills/orchestrate
 
 # Invoke
 /phase refactor the auth module into separate concerns with full test coverage
@@ -144,6 +144,10 @@ cp -r orchestration-skills/.claude/skills/orchestrate .claude/skills/orchestrate
 /debug investigate why login fails after password reset
 /review check the auth refactor PR
 /tdd implement the rate limiter with tests first
+/brainstorm ideas for a real-time collaboration feature
+/worktree create a worktree for the auth refactor
+/finish prepare the auth branch for PR
+/respond-review address the review comments on PR #42
 ```
 
 ### GitHub Copilot — Custom Agents (recommended)
@@ -151,16 +155,20 @@ cp -r orchestration-skills/.claude/skills/orchestrate .claude/skills/orchestrate
 ```bash
 # Copy agent profiles into your project
 mkdir -p .github/agents
-cp orchestration-skills/.github/agents/phase.md .github/agents/
-cp orchestration-skills/.github/agents/prd.md .github/agents/
-cp orchestration-skills/.github/agents/ralph.md .github/agents/
-cp orchestration-skills/.github/agents/debug.md .github/agents/
-cp orchestration-skills/.github/agents/review.md .github/agents/
-cp orchestration-skills/.github/agents/tdd.md .github/agents/
+cp sugar/.github/agents/phase.md .github/agents/
+cp sugar/.github/agents/prd.md .github/agents/
+cp sugar/.github/agents/ralph.md .github/agents/
+cp sugar/.github/agents/debug.md .github/agents/
+cp sugar/.github/agents/review.md .github/agents/
+cp sugar/.github/agents/tdd.md .github/agents/
+cp sugar/.github/agents/brainstorm.md .github/agents/
+cp sugar/.github/agents/worktree.md .github/agents/
+cp sugar/.github/agents/finish.md .github/agents/
+cp sugar/.github/agents/respond-review.md .github/agents/
 
 # Optionally copy the base instructions
-cp orchestration-skills/AGENTS.md ./AGENTS.md
-cp orchestration-skills/.github/copilot-instructions.md .github/
+cp sugar/AGENTS.md ./AGENTS.md
+cp sugar/.github/copilot-instructions.md .github/
 
 # Invoke via Copilot Chat
 @phase refactor the auth module into separate concerns with full test coverage
@@ -169,6 +177,10 @@ cp orchestration-skills/.github/copilot-instructions.md .github/
 @debug investigate why login fails after password reset
 @review check the auth refactor PR
 @tdd implement the rate limiter with tests first
+@brainstorm ideas for a real-time collaboration feature
+@worktree create a worktree for the auth refactor
+@finish prepare the auth branch for PR
+@respond-review address the review comments on PR #42
 ```
 
 ### GitHub Copilot — Prompt Files (alternative)
@@ -176,15 +188,58 @@ cp orchestration-skills/.github/copilot-instructions.md .github/
 ```bash
 # Copy prompt files into your project
 mkdir -p .github/prompts
-cp orchestration-skills/.github/prompts/phase.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/prd.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/ralph.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/debug.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/review.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/tdd.prompt.md .github/prompts/
+cp sugar/.github/prompts/phase.prompt.md .github/prompts/
+cp sugar/.github/prompts/prd.prompt.md .github/prompts/
+cp sugar/.github/prompts/ralph.prompt.md .github/prompts/
+cp sugar/.github/prompts/debug.prompt.md .github/prompts/
+cp sugar/.github/prompts/review.prompt.md .github/prompts/
+cp sugar/.github/prompts/tdd.prompt.md .github/prompts/
+cp sugar/.github/prompts/brainstorm.prompt.md .github/prompts/
+cp sugar/.github/prompts/worktree.prompt.md .github/prompts/
+cp sugar/.github/prompts/finish.prompt.md .github/prompts/
+cp sugar/.github/prompts/respond-review.prompt.md .github/prompts/
 
 # Invoke via Copilot Chat
 /phase refactor the auth module into separate concerns with full test coverage
+```
+
+### Cursor
+
+```bash
+# Copy rules into your project
+mkdir -p .cursor/rules
+cp sugar/.cursor/rules/*.mdc .cursor/rules/
+
+# Rules are auto-matched by description — just start coding
+# The agent will apply relevant rules based on your task
+```
+
+### Codex
+
+```bash
+# Copy skills into your project
+cp -r sugar/.agents/skills .agents/skills
+
+# Skills are auto-matched by description
+```
+
+### OpenCode
+
+```bash
+# Option A: Copy OpenCode agents
+mkdir -p .opencode/agents
+cp sugar/.opencode/agents/*.md .opencode/agents/
+
+# Option B: Copy Claude Code skills (OpenCode reads these natively)
+cp -r sugar/.claude/skills .claude/skills
+```
+
+### Gemini CLI
+
+```bash
+# Copy Gemini skills and main instruction file
+cp -r sugar/.gemini .gemini
+cp sugar/GEMINI.md ./GEMINI.md
 ```
 
 ---
@@ -377,8 +432,10 @@ Tracking files in the main repo (`plan.md`, `todo.md`, `execution.md`) are prese
 
 ```
 AGENTS.md                     <-- Copilot coding agent instructions (repo-level)
+GEMINI.md                     <-- Gemini CLI instructions (imports from .gemini/skills/)
 docs/
   flowchart.html              <-- Interactive workflow flowchart (open in browser)
+  pressure_testing.md         <-- Pressure-testing framework for skills
 .claude/
   skills/
     orchestrate/SKILL.md     <-- /phase — main orchestration skill
@@ -387,26 +444,40 @@ docs/
     debug/SKILL.md            <-- /debug — systematic debugging skill
     review/SKILL.md           <-- /review — adversarial code review skill
     tdd/SKILL.md              <-- /tdd — test-driven development skill
+    brainstorm/SKILL.md       <-- /brainstorm — feature brainstorming skill
+    worktree/SKILL.md         <-- /worktree — git worktree management skill
+    finish/SKILL.md           <-- /finish — branch finishing / PR prep skill
+    respond-review/SKILL.md   <-- /respond-review — receiving code review skill
 .claude-plugin/
   plugin.json                 <-- installable as Claude Code plugin
 .github/
-  agents/
-    phase.md                  <-- @phase — orchestration custom agent
-    prd.md                    <-- @prd — PRD generator custom agent
-    ralph.md                  <-- @ralph — PRD converter custom agent
-    debug.md                  <-- @debug — systematic debugging agent
-    review.md                 <-- @review — adversarial code review agent
-    tdd.md                    <-- @tdd — TDD agent
+  agents/                     <-- Copilot custom agents (10 agents)
+    phase.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    brainstorm.md, worktree.md, finish.md, respond-review.md
   copilot-instructions.md    <-- Copilot base instructions
-  prompts/
-    phase.prompt.md           <-- /phase for Copilot (prompt file)
-    prd.prompt.md             <-- /prd for Copilot (prompt file)
-    ralph.prompt.md           <-- /ralph for Copilot (prompt file)
-    debug.prompt.md           <-- /debug for Copilot (prompt file)
-    review.prompt.md          <-- /review for Copilot (prompt file)
-    tdd.prompt.md             <-- /tdd for Copilot (prompt file)
+  prompts/                    <-- Copilot prompt files (10 prompts)
+    phase.prompt.md, prd.prompt.md, ralph.prompt.md, debug.prompt.md,
+    review.prompt.md, tdd.prompt.md, brainstorm.prompt.md,
+    worktree.prompt.md, finish.prompt.md, respond-review.prompt.md
+.cursor/
+  rules/                      <-- Cursor rules (10 .mdc files)
+    orchestrate.mdc, prd.mdc, ralph.mdc, debug.mdc, review.mdc,
+    tdd.mdc, brainstorm.mdc, worktree.mdc, finish.mdc, respond-review.mdc
+.agents/
+  skills/                     <-- Codex skills (10 skills)
+    orchestrate/, prd/, ralph/, debug/, review/, tdd/,
+    brainstorm/, worktree/, finish/, respond-review/
+.opencode/
+  agents/                     <-- OpenCode agents (10 agents)
+    orchestrate.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    brainstorm.md, worktree.md, finish.md, respond-review.md
+  config.json                 <-- OpenCode project config
+.gemini/
+  skills/                     <-- Gemini CLI skills (10 .md files)
+    orchestrate.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    brainstorm.md, worktree.md, finish.md, respond-review.md
 src/
-  index.ts                    <-- CLI (validate prd.json, report status)
+  index.ts                    <-- CLI (validate, status, dashboard, brainstorm)
   types.ts                    <-- TypeScript types (Ralph prd.json format)
 ```
 
@@ -449,10 +520,10 @@ wait
 
 ```bash
 # Install in any Claude Code project
-claude plugin add /path/to/orchestration-skills
+claude plugin add /path/to/sugar
 
 # Or clone and reference
-git clone <repo-url> ~/.claude/plugins/orchestration-skills
+git clone <repo-url> ~/.claude/plugins/sugar
 ```
 
 ### CLI utility
@@ -474,6 +545,9 @@ node dist/index.js status-all /tmp/myapp-phases
 
 # Generate interactive HTML dashboard and open in browser
 node dist/index.js dashboard /tmp/myapp-phases
+
+# Generate interactive brainstorm HTML for a feature
+node dist/index.js brainstorm "Add real-time collaboration to the editor"
 ```
 
 Example `status-all` output:
@@ -489,18 +563,20 @@ Phase Workspace Status: /tmp/myapp-phases
 
 ---
 
-## Platform differences
+## Platform support
 
-| Capability | Claude Code | GitHub Copilot |
-| --- | --- | --- |
-| Invoke | `/phase <task>` | `@phase <task>` (agent) or `/phase <task>` (prompt) |
-| Parallel subagents | Native (Agent tool) | Manual (multiple sessions) |
-| Task tracking | TaskCreate + file-based | File-based only |
-| Workspaces | Full repo copy | git worktree preferred |
-| Auto-trigger | Yes (description match) | No (manual invoke only) |
-| Agent profiles | `.claude/skills/` | `.github/agents/` |
+All 10 skills are available on 6 platforms:
 
-The workflow, Ralph pattern, managed files, and execution discipline are identical across both platforms.
+| Platform | Skill location | Invoke syntax | Notes |
+| --- | --- | --- | --- |
+| **Claude Code** | `.claude/skills/<name>/SKILL.md` | `/phase <task>` | Native plugin. Parallel subagents via Agent tool. |
+| **GitHub Copilot** | `.github/agents/<name>.md` + `.github/prompts/<name>.prompt.md` | `@phase <task>` or `/phase <task>` | Custom agents (recommended) or prompt files. |
+| **Cursor** | `.cursor/rules/<name>.mdc` | Agent-requested (description match) | Rules with intelligent matching. `alwaysApply: false`. |
+| **Codex** | `.agents/skills/<name>/SKILL.md` | Implicit (description match) | Native skill format. Hierarchical with `AGENTS.md`. |
+| **OpenCode** | `.opencode/agents/<name>.md` | Agent-requested | Also reads `.claude/skills/` natively (zero-config). |
+| **Gemini CLI** | `.gemini/skills/<name>.md` via `GEMINI.md` | Context-loaded | Skills imported via `@` syntax in `GEMINI.md`. |
+
+The workflow, Ralph pattern, managed files, and execution discipline are identical across all platforms.
 
 ---
 

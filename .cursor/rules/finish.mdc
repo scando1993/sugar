@@ -1,0 +1,107 @@
+---
+description: "Branch finishing and PR preparation. Use when a feature branch is ready to merge, when preparing a pull request, or when finalizing work on a branch before review."
+alwaysApply: false
+---
+
+# Branch Finishing / PR Prep
+
+## Iron Law
+`NEVER MERGE WITHOUT ALL CHECKS PASSING`
+
+---
+
+## Steps
+
+### 1. Verify
+Confirm the branch is ready for review.
+
+- Run the full test suite -- all tests must pass
+- Run typecheck and linting -- zero errors
+- Verify all acceptance criteria from the story/PRD are met
+- Check that no debug code, console.logs, or TODO hacks remain
+- Confirm no untracked files that should be committed
+
+```bash
+git status
+# Run project-specific quality checks
+```
+
+### 2. Rebase
+Bring the branch up to date with the target branch.
+
+```bash
+git fetch origin
+git rebase origin/main
+```
+
+- Resolve any conflicts carefully -- do not blindly accept
+- After rebase, re-run all quality checks (rebase can introduce subtle breakage)
+- If conflicts are complex, consider merging instead of rebasing
+
+### 3. Clean History
+Make the commit history tell a clear story.
+
+- Each commit should represent one logical change
+- Commit messages should explain WHY, not just WHAT
+- Remove fixup commits, WIP commits, and "oops" commits
+- Ensure no commits include unrelated changes
+
+```bash
+git log --oneline origin/main..HEAD
+```
+
+### 4. Write PR Description
+Create a clear, complete pull request description.
+
+Structure:
+- **Title**: Short, descriptive (under 70 characters)
+- **Summary**: 1-3 bullet points explaining what changed and why
+- **Test plan**: How to verify the changes work
+- **Breaking changes**: Note any breaking changes explicitly
+- **Screenshots**: Include if there are UI changes
+
+### 5. Self-Review
+Review your own diff before requesting review from others.
+
+```bash
+git diff origin/main...HEAD
+```
+
+Check for:
+- Accidental file inclusions (.env, credentials, large binaries)
+- Code that does not match the PR description
+- Missing error handling or edge cases
+- Inconsistent naming or style
+
+### 6. Push and Create PR
+
+```bash
+git push origin <branch-name> -u
+gh pr create --title "<title>" --body "<description>"
+```
+
+- Verify the PR was created successfully
+- Assign reviewers if applicable
+- Link to related issues or stories
+
+---
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "Tests mostly pass, close enough" | ALL checks must pass. No exceptions. |
+| "I'll fix that in a follow-up PR" | Fix it now. Follow-up PRs get forgotten. |
+| "The diff is too big to self-review" | If the diff is too big to review, it is too big to merge. Split it. |
+| "Rebasing is too risky, I'll just merge" | Rebase when possible for clean history. Only merge if conflicts are genuinely complex. |
+| "Nobody reads PR descriptions" | Your future self reads them. Your reviewers read them. Write them well. |
+
+---
+
+## Rules
+
+- NEVER merge without all checks passing
+- NEVER skip self-review
+- ALWAYS rebase onto the latest target branch before pushing
+- ALWAYS write a meaningful PR description
+- Keep PRs focused -- one feature or fix per PR
