@@ -1,0 +1,63 @@
+---
+description: "Feature brainstorming with structured diverge/converge phases. Use when exploring ideas, brainstorming features, generating options, or when the user needs creative exploration before committing to a direction."
+alwaysApply: false
+---
+
+# Feature Brainstorming
+
+## Iron Law
+`DIVERGE BEFORE YOU CONVERGE -- NO FILTERING DURING IDEATION`
+
+---
+
+## Phases
+
+### 1. Diverge
+Generate as many ideas as possible without judgment.
+- Aim for quantity over quality
+- No criticism, no filtering, no "that won't work"
+- Build on previous ideas ("yes, and...")
+- Include wild/unconventional ideas -- they spark better ones
+- Set a target: at least 10-15 ideas before moving on
+
+### 2. Cluster
+Group related ideas into themes.
+- Identify natural categories (e.g., UX improvements, performance, new capabilities)
+- Look for ideas that overlap or complement each other
+- Name each cluster with a clear theme
+- Some ideas may belong to multiple clusters -- that is fine
+
+### 3. Evaluate
+Score each cluster and its top ideas against criteria.
+- **Impact**: How much value does this deliver to users?
+- **Effort**: How much work to implement? (T-shirt sizes: S/M/L/XL)
+- **Risk**: What could go wrong? Dependencies? Unknowns?
+- **Alignment**: Does this fit the project's goals and direction?
+- Rank clusters by impact-to-effort ratio
+
+### 4. Converge
+Select the top 2-3 ideas to move forward with.
+- Summarize the selected ideas with clear rationale
+- Note what was deliberately left out and why
+- Identify immediate next steps for each selected idea
+- If next step is implementation, recommend creating a PRD
+
+---
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "That idea is impractical, skip it" | You are in Diverge phase. Write it down. Filter later. |
+| "We already have enough ideas" | Do you have 10+? If not, keep going. Premature convergence kills innovation. |
+| "This one is obviously the best, let's just go with it" | Evaluate ALL clusters. Obvious choices often have hidden costs. |
+| "Let's combine everything into one mega-feature" | Converge means choosing, not merging. Pick 2-3 focused ideas. |
+
+---
+
+## Rules
+
+- NEVER filter during Diverge -- all ideas get written down
+- NEVER skip Cluster -- raw lists are hard to evaluate
+- NEVER converge without explicit evaluation criteria
+- Present the full journey (all phases) so the user sees what was considered and why

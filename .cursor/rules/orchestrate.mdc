@@ -1,0 +1,185 @@
+---
+description: "Phased software engineering execution for large refactors, migrations, feature work. Use when a task needs isolated workspaces, atomic commits, parallel branches."
+alwaysApply: false
+---
+
+# Phased Software Engineering Execution
+
+## Iron Law
+`NEVER SKIP A PHASE OR CONTINUE WITHOUT EXPLICIT USER APPROVAL`
+
+## Overview
+
+Execute large engineering tasks through strict phases: Planning, Workspace Setup, Dependency Analysis + Parallel Implementation, and Merge. Each phase requires user approval before proceeding.
+
+The **Sugar** library (`src/lib/`) is the source of truth for all execution logic. Skills delegate to `sugar` CLI commands for workspace management, story state, consensus, and pattern propagation. Do not embed procedural bash scripts or Python one-liners — use Sugar CLI instead.
+
+Use prompt reinforcement at every decision boundary: restate the task, provide context, give the instruction.
+
+---
+
+## Phase 1 -- Planning (No Code)
+
+Goal: Analyze the task and produce a complete execution plan.
+
+Actions:
+- Analyze the task, ask clarifying questions if ambiguous
+- Create `plan.md` at repo root: objective, scope, assumptions, constraints, risks, dependency map, architecture strategy, execution phases, blockers
+- Create `todo.md` at repo root: small actionable tasks grouped by phase, checkbox tracking, dependency annotations, completion criteria
+
+Rules: Do not implement anything. Do not create branches. Stop and wait for approval.
+
+---
+
+## Phase 2 -- Workspace and Branch Setup
+
+Goal: Create an isolated workspace for each execution phase.
+
+Actions:
+
+Use the Sugar CLI to create workspaces:
+
+```bash
+# Create workspace for each phase
+sugar workspace create <phase-name>
+
+# List created workspaces
+sugar workspace list
+```
+
+Branch naming: `phase-a-<scope>`, `phase-b-<scope>`, etc.
+
+Rules: One worktree per phase, one branch per phase. Stop and wait for approval.
+
+---
+
+## Phase 3 -- Dependency Analysis + Parallel Implementation
+
+Three sub-phases: 3a, 3b, 3c.
+
+### 3a -- Dependency Analysis
+For each phase determine: what it produces, what it consumes, hard/soft dependencies, independence. Build the dependency graph. Identify parallel groups, sequential chains, critical path.
+
+### 3b -- Generate Execution Artifacts
+
+The Sugar library generates all workspace files. Use CLI commands:
+
+```bash
+# Initialize config if not present
+sugar config init
+
+# The orchestrator generates: execution.md, prd.json, CLAUDE.md, VERIFY.md, ralph-loop.sh per workspace
+```
+
+For each workspace, the library generates:
+- **`prd.json`** — Ralph-format user stories with consensus state machine
+- **`CLAUDE.md`** — Agent instructions with iron laws, quality protocol, red flags
+- **`VERIFY.md`** — Verifier agent instructions with vote format
+- **`ralph-loop.sh`** — Iteration engine that spawns fresh agents per story
+- **`execution.md`** at repo root — dependency graph, parallel groups, model strategy
+
+Story rules: completable in one pass, ordered by dependency, verifiable criteria, always include "Typecheck passes".
+
+Validate each workspace: `sugar validate <workspace>/prd.json`
+
+### 3c -- Parallel Execution
+
+Launch `ralph-loop.sh` for independent phases in parallel following `execution.md` group ordering:
+
+```bash
+# Launch all independent phases in parallel
+/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 sonnet &
+/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 sonnet &
+wait
+
+# Propagate patterns between groups
+sugar propagate-patterns --base /tmp/<repo>-phases
+
+# Launch next group
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 sonnet &
+wait
+```
+
+The `ralph-loop.sh` uses Sugar CLI for state management:
+- `sugar pick-story` — get next story
+- `sugar story-update` — update story status in prd.json
+- `sugar snapshot` — create git snapshot tag before each attempt
+
+Between groups: `sugar propagate-patterns` to extract and inject patterns.
+Monitor progress: `sugar status-all /tmp/<repo>-phases`
+
+Model selection: Sonnet (default), Haiku (mechanical tasks), Opus (complex architectural). Auto-escalate to Opus on 2+ consecutive failures.
+
+---
+
+## Phase 4 -- Merge
+
+Goal: Safely integrate all completed phase branches.
+
+Actions:
+
+```bash
+# View workspace status first
+sugar status-all /tmp/<repo>-phases
+```
+
+- Create `merge_order.md`: merge order by dependency graph, rationale, expected conflicts, resolution notes
+- Merge in documented order, resolve conflicts, validate after each merge
+- Post-merge: full test suite, typecheck, lint. Not complete until all checks pass.
+
+Cleanup:
+
+```bash
+sugar workspace cleanup
+```
+
+---
+
+## Managed Files
+
+| File | Location | Phase |
+|---|---|---|
+| `plan.md` | repo root | 1 |
+| `todo.md` | repo root | 1 |
+| `execution.md` | repo root | 3b |
+| `prd.json` | each worktree | 3b |
+| `progress.txt` | each worktree | 2 |
+| `CLAUDE.md` | each worktree | 3b |
+| `ralph-loop.sh` | each worktree | 3b |
+| `VERIFY.md` | each worktree | 3b |
+| `patterns.json` | repo root | 3c |
+| `merge_order.md` | repo root | 4 |
+
+---
+
+## Iron Laws (Subagent)
+
+1. **ONE STORY per iteration** — no "while I'm here" additions
+2. **NEVER COMMIT BROKEN code** — every commit must pass all quality checks
+3. **READ PROGRESS.TXT FIRST** — check codebase patterns before writing
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "I'll skip Phase 1 and jump to implementation" | Planning prevents wasted work. Always start with Phase 1. |
+| "These phases can share a branch" | One branch per phase. Isolation prevents merge conflicts. |
+| "I'll launch dependent phases early" | Never launch a phase before its prerequisites complete. |
+| "I don't need to propagate patterns" | Patterns prevent repeated mistakes. Always propagate between groups. |
+| "Tests mostly pass, good enough" | Phase 4 is NOT complete until ALL checks pass. |
+| "I'll just implement two quick stories in one iteration" | ONE story per iteration. The loop handles iteration. No exceptions. |
+| "I know what changed, I don't need to read progress.txt" | Progress.txt IS your memory. You have NO context without it. Read it FIRST. |
+
+---
+
+## How to Interpret User Requests
+
+| User says | Start from |
+|---|---|
+| Planning only / no qualifier | Phase 1 |
+| Planning is approved | Phase 2 |
+| Setup is done | Phase 3 |
+| PRDs exist, ready to implement | Phase 3c |
+| All branches done, wants merge | Phase 4 |
+
+The first deliverable is always Phase 1 planning only, unless the user explicitly states a later phase is approved.

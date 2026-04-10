@@ -1,0 +1,86 @@
+---
+description: "Receiving and responding to code review feedback. Use when you have review comments to address, when a PR has been reviewed and needs updates, or when responding to reviewer feedback."
+alwaysApply: false
+---
+
+# Responding to Code Review
+
+## Iron Law
+`EVERY REVIEW COMMENT DESERVES A RESPONSE`
+
+---
+
+## Steps
+
+### 1. Read All Comments
+Read every comment before responding to any of them.
+- Do not start fixing after reading the first comment
+- Understand the full picture of feedback first
+- Look for patterns -- multiple comments may point to the same underlying issue
+- Note the reviewer's overall sentiment and key concerns
+
+### 2. Categorize
+Sort each comment into one of these categories:
+
+- **Must-fix**: Bugs, security issues, correctness problems, broken tests. These block merge.
+- **Should-fix**: Code quality, naming, missing error handling. Address unless you have a strong reason not to.
+- **Nit**: Style preferences, minor suggestions. Address if easy, otherwise acknowledge.
+- **Question**: The reviewer is asking for clarification, not requesting a change. Answer it.
+- **Disagree**: You believe the reviewer is wrong. Prepare a clear, respectful explanation.
+
+### 3. Address Must-Fix Items
+Fix all must-fix items first, before touching anything else.
+- Each fix should be a separate commit with a clear message
+- Re-run quality checks after each fix
+- If a must-fix item requires significant rework, communicate that to the reviewer before starting
+
+### 4. Respond to Each Comment
+Leave a response on every comment, even if it is just "Done" or "Fixed in [commit]".
+
+Response templates:
+- **Fixed**: "Fixed in [commit hash] -- [brief explanation of what changed]"
+- **Acknowledged nit**: "Good catch, fixed." or "Noted, will address in follow-up."
+- **Clarification**: Answer the question directly and concisely.
+- **Disagree**: "I considered that, but [reason]. Here is why the current approach works: [explanation]. Happy to discuss further."
+
+Rules for disagreements:
+- Lead with understanding: "I see your point about X."
+- Provide concrete reasoning, not just preference
+- Offer to discuss synchronously if the disagreement is complex
+- If the reviewer insists after your explanation, defer unless it introduces a bug
+
+### 5. Re-Request Review
+After all comments are addressed:
+
+```bash
+# Push fixes
+git push origin <branch-name>
+
+# If using GitHub CLI
+gh pr comment <pr-number> --body "All review comments addressed. Ready for re-review."
+```
+
+- Verify all quality checks still pass after your fixes
+- Summarize what changed if the fixes were substantial
+- Do not mark comments as resolved yourself -- let the reviewer do that
+
+---
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "This comment is wrong, I'll ignore it" | Every comment gets a response. Explain why you disagree. |
+| "I'll batch all fixes into one commit" | Separate commits per fix make re-review easier. |
+| "The reviewer is being nitpicky" | Nits improve code quality. Address them gracefully. |
+| "I'll just resolve these comments myself" | Let the reviewer confirm their concerns are addressed. |
+
+---
+
+## Rules
+
+- EVERY comment gets a response -- no exceptions
+- Fix must-fix items FIRST, before addressing nits
+- NEVER resolve review comments yourself -- the reviewer resolves them
+- Re-run all quality checks after making fixes
+- Push fixes as new commits, not force-pushed amendments (unless the team prefers otherwise)

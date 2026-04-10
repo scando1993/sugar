@@ -786,7 +786,7 @@
 
 <div class="header">
   <h1>Phased Software Engineering Execution</h1>
-  <p>Interactive workflow guide — click any phase to explore its steps, decisions, and artifacts</p>
+  <p>Interactive workflow guide — model tiering, consensus verification, iron laws, and the full phase execution model</p>
 </div>
 
 <nav class="nav-pills" id="nav">
@@ -860,6 +860,8 @@
         <span class="artifact-badge">prd.json</span>
         <span class="artifact-badge">CLAUDE.md</span>
         <span class="artifact-badge">ralph-loop.sh</span>
+        <span class="artifact-badge">VERIFY.md</span>
+        <span class="artifact-badge">patterns.json</span>
       </div>
     </div>
 
@@ -912,6 +914,9 @@
       <tr><td>CLAUDE.md</td><td>each phase workspace</td><td>Phase 3b</td><td>Ralph agent instructions</td></tr>
       <tr><td>ralph-loop.sh</td><td>each phase workspace</td><td>Phase 3b</td><td>Iteration loop (spawns fresh agents per story)</td></tr>
       <tr><td>merge_order.md</td><td>repo root</td><td>Phase 4</td><td>Merge sequence and conflict expectations</td></tr>
+      <tr><td>VERIFY.md</td><td>each worktree</td><td>Phase 3b</td><td>Verifier agent instructions + vote format</td></tr>
+      <tr><td>patterns.json</td><td>repo root</td><td>Phase 3c (between groups)</td><td>Extracted codebase patterns for propagation</td></tr>
+      <tr><td>failure_log.json</td><td>each phase workspace</td><td>Phase 3b</td><td>Structured failure reports for retry strategy</td></tr>
     </tbody>
   </table>
 </div>
@@ -1169,10 +1174,26 @@
         <p>The iteration engine. A bash loop that spawns fresh agent instances — one per story. Detects <code>PHASE_COMPLETE</code> to exit. Made executable with <code>chmod +x</code>.</p>
       </div>
     </div>
+
+    <div class="step-card" data-delay="400">
+      <div class="step-number" style="background: var(--phase3b);">5</div>
+      <div class="step-body">
+        <h4>Generate <code>VERIFY.md</code> per Phase (Consensus Mode)</h4>
+        <p>When prd.json has a consensus config, generate verifier agent instructions with iron laws, rationalization table, and VOTE:PASS/VOTE:FAIL output format. Only created for consensus-mode phases.</p>
+      </div>
+    </div>
+
+    <div class="step-card" data-delay="500">
+      <div class="step-number" style="background: var(--phase3b);">6</div>
+      <div class="step-body">
+        <h4>Generate <code>patterns.json</code> Schema</h4>
+        <p>Define the patterns.json schema for structured pattern propagation between execution groups. Includes pattern name, description, applies_to scope, and example.</p>
+      </div>
+    </div>
   </div>
 
   <div class="info-box success">
-    <strong>After this step:</strong> Each phase workspace has exactly 4 files — <code>prd.json</code>, <code>progress.txt</code>, <code>CLAUDE.md</code>, <code>ralph-loop.sh</code> — ready for autonomous execution.
+    <strong>After this step:</strong> Each phase workspace has 6 files — <code>prd.json</code>, <code>progress.txt</code>, <code>CLAUDE.md</code>, <code>ralph-loop.sh</code>, <code>VERIFY.md</code>, and <code>patterns.json</code> (between groups) — ready for autonomous execution.
   </div>
 </div>
 
@@ -1346,18 +1367,21 @@
   </div>
 
   <div class="info-box tip">
-    The Ralph pattern is the core execution engine. Each phase workspace runs this loop independently. A bash script (<code>ralph-loop.sh</code>) spawns fresh agent instances — one per story — preventing context exhaustion.
+    The Ralph pattern is the core execution engine. Each phase workspace runs this loop independently. A bash script (<code>ralph-loop.sh</code>) spawns fresh agent instances — one per story — with <strong>model tiering</strong> (auto-escalation on repeated failures) and <strong>consensus verification</strong> (Raft-inspired quorum voting).
   </div>
 
   <div class="ralph-loop-visual" id="ralph-visual">
 
-    <div class="loop-node start">ralph-loop.sh starts (max N iterations)</div>
+    <div class="loop-node start">ralph-loop.sh starts (max N iterations, default model)</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node file">Agent reads prd.json + progress.txt (Codebase Patterns first)</div>
+    <div class="loop-node action">Create snapshot tag: attempt-${STORY_ID}-v${N}</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node check">Pick highest priority story where passes: false</div>
+    <div class="loop-node file">Agent reads prd.json + progress.txt + failure_log.json</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node check">Pick highest priority incomplete story</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-branch">
@@ -1373,27 +1397,76 @@
     <div class="loop-node action">Implement the single user story</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node check">Run quality checks (typecheck, lint, tests)</div>
+    <div class="loop-node action">Output STORY_IMPLEMENTED:US-XXX</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node check">Launch verifier quorum (parallel agents)</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node file">Each verifier: read diff, run checks, cast VOTE:PASS or VOTE:FAIL</div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node check">Tally votes — required majority?</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-branch">
-      <div class="loop-branch-item" style="background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); color: var(--accent-red);">
-        Fail?<br><strong>Retry (up to 3x)</strong><br>If stuck: record blocker,<br>reset, move to next
-      </div>
       <div class="loop-branch-item" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
-        Pass?<br><strong>Commit</strong><br><code>feat: US-001 - Title</code>
+        Majority pass?<br><strong>Commit</strong><br><code>feat: US-001 - Title</code>
+      </div>
+      <div class="loop-branch-item" style="background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); color: var(--accent-red);">
+        Majority fail?<br><strong>Reject + log</strong><br>Reset changes, record in rejection_log.txt
       </div>
     </div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node action">Set passes: true in prd.json</div>
+    <div class="loop-node check">Model escalation: 2+ consecutive failures &rarr; upgrade model</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node file">Append learnings to progress.txt</div>
+    <div class="loop-node file">Log model + result to progress.txt</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-node complete">Agent exits. Loop spawns fresh iteration.</div>
 
+  </div>
+
+  <h3 style="margin: 32px 0 16px; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em;">Iron Laws</h3>
+
+  <div class="concepts-grid">
+    <div class="concept-card" style="--card-color: var(--accent-red);">
+      <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--accent-red);">1</div>
+      <h4>ONE STORY</h4>
+      <p>Implement exactly one user story per iteration, then stop. No "while I'm here" additions.</p>
+    </div>
+    <div class="concept-card" style="--card-color: var(--accent-red);">
+      <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--accent-red);">&#x2717;</div>
+      <h4>NEVER COMMIT BROKEN</h4>
+      <p>Every commit must pass all quality checks. No exceptions, no skipping.</p>
+    </div>
+    <div class="concept-card" style="--card-color: var(--accent-red);">
+      <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--accent-red);">&#x1f4d6;</div>
+      <h4>READ PROGRESS.TXT FIRST</h4>
+      <p>Always read codebase patterns before writing a single line of code.</p>
+    </div>
+  </div>
+
+  <h3 style="margin: 32px 0 16px; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em;">Model Tiering</h3>
+
+  <div class="concepts-grid">
+    <div class="concept-card" style="--card-color: var(--accent-orange);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x25cb;</div>
+      <h4>Default Model</h4>
+      <p>Start with a cost-effective model (e.g., Sonnet). Configurable per phase via <code>ralph-loop.sh 20 sonnet</code>.</p>
+    </div>
+    <div class="concept-card" style="--card-color: var(--accent-orange);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x2191;</div>
+      <h4>Auto-Escalation</h4>
+      <p>After 2 consecutive failures (ESCALATION_THRESHOLD), upgrade to a more capable model (e.g., Opus). No manual intervention needed.</p>
+    </div>
+    <div class="concept-card" style="--card-color: var(--accent-orange);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x2193;</div>
+      <h4>De-Escalation</h4>
+      <p>After a success on an escalated model, drop back to the default. Keeps cost efficient while handling hard stories.</p>
+    </div>
   </div>
 
   <h3 style="margin: 32px 0 16px; color: var(--text-muted); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.06em;">Memory Persistence (across iterations)</h3>
@@ -1417,7 +1490,7 @@
   </div>
 
   <div class="info-box warn">
-    <strong>Error recovery:</strong> If quality checks fail 3 times, the agent records the blocker in <code>prd.json</code> notes, resets unstaged changes with <code>git checkout -- .</code>, and moves to the next story. No story is left in a broken state.
+    <strong>Error recovery:</strong> Before each attempt, a snapshot tag (<code>attempt-US-001-v1</code>) is created for rollback. If quality checks fail 3 times, the agent writes a structured report to <code>failure_log.json</code> (storyId, attempt, filesModified, failureType, lastError), resets changes, and moves to the next story. Future agents read failure_log.json to try a DIFFERENT approach.
   </div>
 </div>
 
@@ -1504,6 +1577,30 @@
       <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--phase4);">&#x23ef;</div>
       <h4>Full Resumability</h4>
       <p>Interrupted mid-execution? Just restart. <code>prd.json</code> tracks which stories passed. <code>progress.txt</code> preserves learnings. Git preserves code. Pick up exactly where you stopped.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-orange);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x1f4da;</div>
+      <h4>Model Tiering</h4>
+      <p>Start with a cost-effective model, auto-escalate to a more capable one after consecutive failures, de-escalate after success. Balances cost and capability across stories of varying difficulty.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-cyan);">
+      <div class="concept-icon" style="background: rgba(57,210,192,0.15); color: var(--accent-cyan);">&#x1f5f3;</div>
+      <h4>Consensus Verification</h4>
+      <p>Raft-inspired verification built into every phase: after implementation, a quorum of verifier agents independently review the code and cast VOTE:PASS or VOTE:FAIL. Majority required to commit. Catches errors a single agent might miss.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-red);">
+      <div class="concept-icon" style="background: rgba(248,81,73,0.15); color: var(--accent-red);">&#x1f6e1;</div>
+      <h4>Iron Laws</h4>
+      <p>Three inviolable rules enforced in every agent: ONE STORY per iteration, NEVER COMMIT BROKEN code, READ PROGRESS.TXT FIRST. Rationalization tables help agents catch self-deceptive shortcuts.</p>
+    </div>
+
+    <div class="concept-card" style="--card-color: var(--accent-orange);">
+      <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x21a9;</div>
+      <h4>Rollback &amp; Recovery</h4>
+      <p>Snapshot tags before each attempt enable clean rollback. Structured failure reports in <code>failure_log.json</code> give future agents context to try different approaches instead of repeating the same mistake.</p>
     </div>
 
   </div>

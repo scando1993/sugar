@@ -1,10 +1,35 @@
+// ============================================================
+// prd.json types (existing)
+// ============================================================
+
+export interface Vote {
+  term: number;
+  verifier: number;
+  result: 'pass' | 'fail';
+  reason?: string;
+  timestamp?: string;
+}
+
+export interface ConsensusConfig {
+  quorumSize: number;
+  requiredMajority: number;
+  implementModel: string;
+  verifyModel: string;
+  escalationModel: string;
+  maxTerms: number;
+}
+
+export type StoryStatus = 'pending' | 'implementing' | 'verifying' | 'passed' | 'rejected' | 'blocked';
+
 export interface UserStory {
   id: string;
   title: string;
   description: string;
   acceptanceCriteria: string[];
   priority: number;
-  passes: boolean;
+  status: StoryStatus;
+  term: number;
+  votes: Vote[];
   notes: string;
 }
 
@@ -12,6 +37,7 @@ export interface PrdJson {
   project: string;
   branchName: string;
   description: string;
+  consensus: ConsensusConfig;
   userStories: UserStory[];
 }
 
@@ -19,4 +45,232 @@ export interface ValidationError {
   field: string;
   message: string;
   storyId?: string;
+}
+
+// ============================================================
+// Sugar config
+// ============================================================
+
+export interface ModelConfig {
+  default: string;
+  escalation: string;
+  verify?: string;
+}
+
+export interface EscalationConfig {
+  threshold: number;
+}
+
+export interface SugarConfig {
+  models: ModelConfig;
+  consensus: {
+    quorumSize: number;
+    requiredMajority: number;
+  };
+  escalation: EscalationConfig;
+  qualityChecks: string[];
+  maxIterations: number;
+}
+
+export const DEFAULT_CONFIG: SugarConfig = {
+  models: {
+    default: 'sonnet',
+    escalation: 'opus',
+    verify: 'sonnet',
+  },
+  consensus: {
+    quorumSize: 3,
+    requiredMajority: 2,
+  },
+  escalation: {
+    threshold: 2,
+  },
+  qualityChecks: ['npm run typecheck', 'npm run lint', 'npm test'],
+  maxIterations: 20,
+};
+
+// ============================================================
+// Events
+// ============================================================
+
+export interface StoryStartedEvent {
+  type: 'story_started';
+  storyId: string;
+  timestamp: string;
+  model: string;
+}
+
+export interface StoryPassedEvent {
+  type: 'story_passed';
+  storyId: string;
+  timestamp: string;
+  term: number;
+  passVotes: number;
+  totalVotes: number;
+}
+
+export interface StoryFailedEvent {
+  type: 'story_failed';
+  storyId: string;
+  timestamp: string;
+  attempt: number;
+  error: string;
+}
+
+export interface VoteCastEvent {
+  type: 'vote_cast';
+  storyId: string;
+  verifier: number;
+  result: 'pass' | 'fail';
+  reason?: string;
+  timestamp: string;
+}
+
+export interface PhaseCompleteEvent {
+  type: 'phase_complete';
+  phase: string;
+  timestamp: string;
+  storiesPassed: number;
+  totalStories: number;
+}
+
+export interface ModelEscalatedEvent {
+  type: 'model_escalated';
+  from: string;
+  to: string;
+  consecutiveFailures: number;
+  timestamp: string;
+}
+
+export type SugarEvent =
+    | StoryStartedEvent
+    | StoryPassedEvent
+    | StoryFailedEvent
+    | VoteCastEvent
+    | PhaseCompleteEvent
+    | ModelEscalatedEvent;
+
+// ============================================================
+// Dependency graph
+// ============================================================
+
+export type DependencyType = 'hard' | 'soft';
+
+export interface PhaseNode {
+  id: string;
+  name: string;
+  produces: string[];
+  consumes: string[];
+  dependencies: string[];  // phase IDs this depends on
+}
+
+export interface DependencyEdge {
+  from: string;   // phase ID
+  to: string;     // phase ID
+  type: DependencyType;
+  artifact?: string;  // what is being depended on
+}
+
+export interface ParallelGroup {
+  groupNumber: number;
+  phases: string[];         // phase IDs
+  dependsOnGroups: number[];
+}
+
+export interface CriticalPath {
+  phases: string[];   // ordered phase IDs on critical path
+  length: number;     // number of phases
+}
+
+export interface DependencyGraph {
+  nodes: PhaseNode[];
+  edges: DependencyEdge[];
+  parallelGroups: ParallelGroup[];
+  criticalPath: CriticalPath;
+}
+
+// ============================================================
+// Workspace
+// ============================================================
+
+export interface WorkspaceConfig {
+  repoRoot: string;
+  basePath: string;         // e.g. /tmp/<repo>-phases
+  repoName: string;
+}
+
+export interface PhaseWorkspace {
+  phase: string;            // e.g. "phase-a-types"
+  branch: string;           // e.g. "phase-a-types"
+  path: string;             // absolute path to worktree
+  model: string;            // default model for this phase
+}
+
+// ============================================================
+// Template contexts
+// ============================================================
+
+export interface ClaudeMdContext {
+  phaseName: string;
+  branchName: string;
+  phaseScope: string;
+  taskDescription: string;
+  workspacePath: string;
+  dependenciesSatisfied: string[];
+  knownPatterns: Pattern[];
+  qualityChecks: string[];
+}
+
+export interface VerifyMdContext {
+  phaseName: string;
+}
+
+export interface RalphLoopContext {
+  phaseName: string;
+  maxIterations: number;
+  defaultModel: string;
+  escalationModel: string;
+  escalationThreshold: number;
+  sugarBin: string;         // path to sugar CLI for state management
+}
+
+// ============================================================
+// Patterns
+// ============================================================
+
+export interface Pattern {
+  id: string;
+  learned_in: string;
+  description: string;
+  applies_to: string[];
+  confidence: 'high' | 'medium' | 'low';
+}
+
+export interface PatternsJson {
+  patterns: Pattern[];
+}
+
+// ============================================================
+// Failure log
+// ============================================================
+
+export interface FailureReport {
+  storyId: string;
+  attempt: number;
+  filesModified: string[];
+  failureType: string;
+  lastError?: string;
+  timestamp?: string;
+}
+
+// ============================================================
+// Model tiering
+// ============================================================
+
+export interface ModelTierState {
+  currentModel: string;
+  defaultModel: string;
+  escalationModel: string;
+  consecutiveFailures: number;
+  escalationThreshold: number;
 }

@@ -17,6 +17,8 @@ You are an orchestration agent that drives complex engineering tasks through a s
 
 Subagent execution follows the **Ralph** pattern (https://github.com/snarktank/ralph). Each phase workspace is a self-contained Ralph environment: `CLAUDE.md` (agent instructions), `prd.json` (story state machine), `progress.txt` (learning persistence).
 
+The **Sugar** library (`src/lib/`) is the source of truth for all execution logic. Skills delegate to `sugar` CLI commands for workspace management, story state, consensus, and pattern propagation. Do not embed procedural bash scripts or Python one-liners — use Sugar CLI instead.
+
 ## Prompt reinforcement
 
 Use **prompt repetition** at every decision boundary: state the task, provide context, give the instruction, restate context briefly, repeat the instruction. Apply at skill level, per-phase, and per-story.
@@ -53,14 +55,22 @@ Create isolated Ralph workspaces per phase.
 
 ### Actions
 
+Use the Sugar CLI to create workspaces:
+
 ```bash
-mkdir -p /tmp/<repo>-phases
-git worktree add /tmp/<repo>-phases/<phase-name> -b <branch-name>
+# Create workspace for each phase
+sugar workspace create <phase-name>
+
+# List created workspaces
+sugar workspace list
 ```
 
-Initialize `progress.txt` in each workspace.
-
 Branch naming: `phase-a-<scope>`, `phase-b-<scope>`, etc.
+
+### Rules
+- One worktree per phase, one branch per phase
+- Do not start implementation unless user approves Phase 3
+- Document setup problems in `plan.md`
 
 ---
 
@@ -79,115 +89,44 @@ Build dependency graph. Identify parallel groups, sequential chains, critical pa
 
 ### Phase 3b — Generate execution.md, prd.json, and CLAUDE.md per workspace
 
-#### `execution.md` at repo root
-1. Dependency graph (ASCII)
-2. Parallel execution groups
-3. Execution order
-4. Critical path analysis
-5. Risk assessment
-6. Rationale
-
-#### `prd.json` in each workspace
-
-Convert tasks from `todo.md` into Ralph-format stories. Stories must be: one-pass completable, dependency-ordered, verifiably criteria'd, always include "Typecheck passes".
-
-#### `CLAUDE.md` in each workspace
-
-Write Ralph agent instructions. Each iteration handles **ONE story** — the loop script handles spawning fresh instances.
-
-```markdown
-# Ralph Agent — [Phase Name]
-
-You are an autonomous coding agent. You handle ONE user story per invocation.
-
-## Your Task
-1. Read prd.json in this directory
-2. Read progress.txt — check Codebase Patterns first
-3. Verify branch [branch-name]
-4. Pick highest priority story where passes: false
-5. If no stories remain with passes: false -> reply with: PHASE_COMPLETE
-6. Implement that single story
-7. Run quality checks
-8. Pass -> commit: feat: [Story ID] - [Story Title]
-9. Fail -> fix/retry 3x. If stuck: set notes in prd.json, log to progress.txt, git checkout -- .
-10. Set passes: true in prd.json
-11. Append to progress.txt
-12. When ALL stories pass -> push and reply with: PHASE_COMPLETE
-
-## Stop Condition
-If all stories have passes: true -> push and output: PHASE_COMPLETE
-Otherwise end normally — the loop spawns a fresh iteration.
-
-## Rules
-- ONE story per iteration — implement one, then stop
-- ALL commits must pass quality checks
-- Do NOT commit broken code
-
-## Context
-- Task: [full description]
-- Workspace: [path]
-- Branch: [branch]
-- Prior patterns: [from completed phases]
-
-## Task (repeated)
-Read prd.json. Pick ONE story. Implement it. Commit. Mark done. Stop. The loop handles iteration.
-```
-
-#### Generate `ralph-loop.sh` in each workspace
-
-The iteration engine — spawns fresh agent instances per story, with retry and backoff for transient API errors:
+The Sugar library generates all workspace files. Use CLI commands:
 
 ```bash
-#!/bin/bash
-# Ralph loop — [phase-name]
-# Usage: ./ralph-loop.sh [max_iterations]
+# Initialize config if not present
+sugar config init
 
-MAX_ITERATIONS=${1:-20}
-MAX_RETRIES=3       # retries per iteration on transient errors
-BASE_SLEEP=8        # seconds between successful iterations
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-echo "Starting Ralph loop — Phase: [phase-name]"
-echo "Max iterations: $MAX_ITERATIONS"
-
-# Stagger parallel phase starts to avoid simultaneous API bursts
-JITTER=$((RANDOM % 15))
-[ "$JITTER" -gt 0 ] && echo "Stagger delay: ${JITTER}s" && sleep $JITTER
-
-for i in $(seq 1 $MAX_ITERATIONS); do
-  echo ""
-  echo "=== Iteration $i of $MAX_ITERATIONS ==="
-
-  OUTPUT=""
-  RETRY_DELAY=10
-
-  for attempt in $(seq 1 $MAX_RETRIES); do
-    OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1) && break
-    if echo "$OUTPUT" | grep -qiE "transient|rate.?limit|overload|503|529"; then
-      echo "Transient error (attempt $attempt/$MAX_RETRIES) — retrying in ${RETRY_DELAY}s..."
-      sleep $RETRY_DELAY
-      RETRY_DELAY=$((RETRY_DELAY * 2))   # 10s → 20s → 40s
-    else
-      break   # non-transient — don't retry
-    fi
-  done
-
-  echo "$OUTPUT"
-
-  if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
-    echo "Phase [phase-name] complete at iteration $i!"
-    exit 0
-  fi
-
-  echo "Sleeping ${BASE_SLEEP}s before next story..."
-  sleep $BASE_SLEEP
-done
-
-echo "Reached max iterations ($MAX_ITERATIONS). Check prd.json for status."
-exit 1
+# The orchestrator generates: execution.md, prd.json, CLAUDE.md, VERIFY.md, ralph-loop.sh per workspace
 ```
 
-Make executable: `chmod +x ralph-loop.sh`
+For each workspace, the library generates:
+- **`prd.json`** — Ralph-format user stories with consensus state machine
+- **`CLAUDE.md`** — Agent instructions with iron laws, quality protocol, red flags
+- **`VERIFY.md`** — Verifier agent instructions with vote format
+- **`ralph-loop.sh`** — Iteration engine that spawns fresh agents per story
+- **`execution.md`** at repo root — dependency graph, parallel groups, model strategy
+
+**Story rules:** completable in one pass, ordered by dependency (schema -> backend -> UI), verifiable criteria, always include "Typecheck passes".
+
+#### `patterns.json` schema (repo root, populated between groups)
+
+```json
+{
+  "patterns": [
+    {
+      "id": "P1",
+      "learned_in": "phase-a",
+      "description": "Use server actions instead of API routes for mutations",
+      "applies_to": ["phase-b", "phase-c"],
+      "confidence": "high"
+    }
+  ]
+}
+```
+
+#### Rules
+- Every workspace must have: `prd.json`, `progress.txt`, `CLAUDE.md`, `ralph-loop.sh`, `VERIFY.md`
+- Do not proceed to 3c until all workspaces are fully set up
+- Validate each `prd.json`: `sugar validate <workspace>/prd.json`
 
 ---
 
@@ -207,29 +146,42 @@ ralph-loop.sh
 
 Memory persists via `prd.json` (state), `progress.txt` (learnings), and git (code).
 
-#### Parallel execution
+#### Execution
 
-Follow `execution.md` group ordering. Stagger launches by 5s to prevent simultaneous API bursts — the loop scripts also add random jitter internally:
+Follow `execution.md` group ordering. Launch ralph loops per group:
 
 ```bash
-/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 &
-PID_A=$!
-sleep 5
-/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 &
-PID_B=$!
-sleep 5
-/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 &
-PID_C=$!
-wait $PID_A $PID_B $PID_C
+# Launch all independent phases in parallel
+/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 sonnet &
+/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 sonnet &
+wait
+
+# Propagate patterns between groups
+sugar propagate-patterns --base /tmp/<repo>-phases
+
+# Launch next group
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 sonnet &
+wait
 ```
+
+The `ralph-loop.sh` uses Sugar CLI for state management:
+- `sugar pick-story` — get next story
+- `sugar story-update` — update story status in prd.json
+- `sugar snapshot` — create git snapshot tag before each attempt
+
+#### Model selection per phase
+- **Sonnet** (default): Well-scoped implementation tasks
+- **Haiku**: Mechanical tasks — config changes, boilerplate
+- **Opus**: Complex architectural decisions, ambiguous requirements
+
+Auto-escalates to Opus on 2+ consecutive failures.
 
 If `claude` CLI is not available, open one Copilot session per workspace and run each Ralph loop manually — do not start all sessions at the same time.
 
-**Between groups:**
-1. Collect Codebase Patterns from completed workspaces' `progress.txt`
-2. Update next group's `CLAUDE.md` with those patterns
-3. Update `execution.md` with results
-4. Launch next group
+#### Completion tracking
+- Phase complete when `ralph-loop.sh` exits 0
+- After each group: `sugar propagate-patterns` to extract and inject patterns
+- Monitor progress: `sugar status-all /tmp/<repo>-phases`
 
 #### Rules
 - Never start dependent phase before prerequisites complete
@@ -242,6 +194,11 @@ If `claude` CLI is not available, open one Copilot session per workspace and run
 
 Create `merge_order.md`: merge order, rationale, expected conflicts, resolution notes, validation steps, post-merge checklist.
 
+```bash
+# View workspace status first
+sugar status-all /tmp/<repo>-phases
+```
+
 **Manual:** stop after `merge_order.md`.
 
 **Automatic:** merge in order, resolve conflicts, validate after each, update notes.
@@ -249,15 +206,39 @@ Create `merge_order.md`: merge order, rationale, expected conflicts, resolution 
 ### Post-merge validation
 Run full test suite + typecheck + lint on final result. Not complete until all pass.
 
+### Cleanup
+
+```bash
+sugar workspace cleanup
+```
+
+---
+
+## Iron Laws
+
+Three inviolable rules enforced in every workspace:
+
+1. **ONE STORY per iteration** — no "while I'm here" additions
+2. **NEVER COMMIT BROKEN code** — every commit must pass all quality checks
+3. **READ PROGRESS.TXT FIRST** — check codebase patterns before writing
+
+## Red Flags — If You Catch Yourself Thinking:
+
+| Thought | Reality |
+|---|---|
+| "I'll just implement two quick stories in one iteration" | ONE story per iteration. The loop handles iteration. No exceptions. |
+| "The tests mostly pass, I'll commit and fix later" | ALL commits must pass quality checks. Broken commits poison every future iteration. |
+| "This dependency isn't really needed, I'll skip it" | The dependency graph exists for a reason. Never start dependent work before prerequisites complete. |
+| "I know what changed, I don't need to read progress.txt" | Progress.txt IS your memory. You have NO context without it. Read it FIRST. |
+| "This is a trivial change, I don't need to run checks" | Every commit gets checked. No exceptions. The one you skip is the one that breaks everything. |
+| "I'll refactor this while I'm here" | Stay in scope. Implement the story. Nothing more. |
+
 ---
 
 ## Abort and cleanup
 
 ```bash
-git worktree list
-git worktree remove /tmp/<repo>-phases/<phase> --force
-git branch -D <branch>
-git worktree prune
+sugar workspace cleanup
 ```
 
 ---
@@ -296,6 +277,8 @@ git worktree prune
 | `progress.txt` | each worktree | Phase 2 |
 | `CLAUDE.md` | each worktree | Phase 3b |
 | `ralph-loop.sh` | each worktree | Phase 3b |
+| `VERIFY.md` | each worktree | Phase 3b (consensus only) |
+| `patterns.json` | repo root | Phase 3c (between groups) |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---

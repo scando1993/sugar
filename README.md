@@ -1,8 +1,8 @@
-# Phased Software Engineering Execution
+# Sugar
 
-An orchestration skill that drives large engineering tasks through a strict multi-phase workflow with PRD-driven implementation, parallel execution, and progress tracking.
+Phased software engineering execution — drives large engineering tasks through a strict multi-phase workflow with PRD-driven implementation, parallel execution, and progress tracking.
 
-Built for **Claude Code** and **GitHub Copilot**.
+Built for **Claude Code**, **GitHub Copilot**, **Cursor**, **Windsurf**, **Cline**, **Codex**, **OpenCode**, and **Gemini CLI**.
 
 Based on the [Ralph](https://github.com/snarktank/ralph) autonomous agent pattern.
 
@@ -22,6 +22,7 @@ Takes a complex engineering task and executes it through four strict phases:
 Phase 1: Planning        --> plan.md + todo.md
 Phase 2: Workspace Setup --> isolated branches per phase
 Phase 3: Implementation  --> dependency analysis --> prd.json per phase --> Ralph agent loop
+                              + model tiering + consensus verification + pattern propagation
 Phase 4: Merge           --> merge_order.md --> safe integration
 ```
 
@@ -72,17 +73,25 @@ Phase 3 runs three sequential sub-phases:
 
 - **`execution.md`** at repo root — the full dependency graph (ASCII visualization), parallel execution groups numbered by order, critical path analysis, risk assessment including conflict likelihood and shared file areas, and the rationale for the chosen execution order.
 
-- **`prd.json`** in each phase workspace — user stories in Ralph format. Each story has an ID (`US-001`), title, description (`As a [user], I need [what] so that [why]`), acceptance criteria (must be objectively verifiable, always includes "Typecheck passes"), a priority (determines execution order), a `passes` flag (starts `false`, set to `true` on completion), and a `notes` field (empty by default, records blockers if the story gets stuck). Stories are right-sized: completable in one agent pass, describable in 2-3 sentences, ordered by internal dependency.
+- **`prd.json`** in each phase workspace — user stories in Ralph format. Each story has an ID (`US-001`), title, description (`As a [user], I need [what] so that [why]`), acceptance criteria (must be objectively verifiable, always includes "Typecheck passes"), a priority (determines execution order), a `status` field (lifecycle: `"pending"` -> `"implementing"` -> `"verifying"` -> `"passed"` or `"rejected"`), `term`, `votes`, and a `notes` field (empty by default, records blockers if the story gets stuck). Stories are right-sized: completable in one agent pass, describable in 2-3 sentences, ordered by internal dependency.
 
-- **`CLAUDE.md`** in each phase workspace — the autonomous agent's instructions. Contains the full Ralph protocol: read prd.json, check progress.txt codebase patterns, pick the highest priority incomplete story, implement it, run quality checks, commit with a structured message (`feat: US-001 - Story Title`), mark the story as passing, append learnings to progress.txt, and stop. The task is restated at both the top and bottom of the file (prompt repetition) to ensure the agent maintains full attention.
+- **`CLAUDE.md`** in each phase workspace — the autonomous agent's instructions. Contains the full Ralph protocol with **iron laws** (ONE STORY per iteration, NEVER COMMIT BROKEN code, READ PROGRESS.TXT FIRST), a 6-step **quality protocol** (implement, self-review, run checks, verify criteria, commit, fix-if-fail), and a **rationalization table** that catches agent self-deception. The agent picks stories with `status: "pending"` or `"rejected"`, checks `failure_log.json` for prior failures, and outputs `STORY_IMPLEMENTED:US-XXX` for verifier agents.
 
 - **`ralph-loop.sh`** in each phase workspace — the iteration engine. A bash loop that spawns fresh agent instances, one per story. Each iteration runs `claude < CLAUDE.md`, captures the output, and checks for the `PHASE_COMPLETE` signal. When all stories pass, the agent outputs `PHASE_COMPLETE` and the loop exits. Made executable with `chmod +x`.
+
+- **`VERIFY.md`** in each phase workspace — the verifier agent's instructions. Contains iron laws, a rationalization table, and the VOTE:PASS/VOTE:FAIL output format. A quorum of verifier agents independently review each story implementation before it can be committed.
+
+- **`patterns.json`** at repo root (generated between groups) — structured codebase patterns extracted from completed phases. Each pattern has a name, description, `applies_to` scope, and example. Injected into the next group's CLAUDE.md context for consistency.
+
+- **`failure_log.json`** in each phase workspace — structured failure reports (storyId, attempt, filesModified, failureType, lastError). Created after 3 failed attempts on a story. Future agents read this to try a different approach.
+
+The `ralph-loop.sh` script supports **model tiering**: it starts with a default model (e.g., Sonnet), automatically escalates to a more capable model (e.g., Opus) after 2 consecutive failures, and de-escalates back after a success. Before each attempt, a snapshot tag (`attempt-US-001-v1`) is created for clean rollback.
 
 **3c — Parallel execution**: launches the Ralph loops according to the dependency graph:
 
 1. **Group 1** — all phases with zero dependencies start their `ralph-loop.sh` scripts simultaneously as background processes.
 2. **Wait** — the orchestrator waits for all Group 1 processes to complete.
-3. **Pattern propagation** — codebase patterns discovered in Group 1 (from their `progress.txt` files) are collected and injected into the next group's `CLAUDE.md` context, ensuring consistency.
+3. **Pattern propagation** — codebase patterns discovered in Group 1 are extracted into `patterns.json` (structured format with name, description, scope, and example), then injected into the next group's `CLAUDE.md` under a `## Known Patterns` section, ensuring consistency across parallel implementations.
 4. **Group 2** — phases that depend on Group 1 launch in parallel.
 5. Repeat until all groups complete.
 
@@ -102,7 +111,7 @@ If quality checks fail after implementing a story, the Ralph loop:
 3. If fixed, continues to commit
 4. If stuck, records the blocker in `prd.json` notes and `progress.txt`, resets unstaged changes with `git checkout -- .`, and moves to the next story
 
-No story is left in a broken state. Blocked stories are visible in `prd.json` and surfaced by the CLI (`node dist/index.js status`).
+No story is left in a broken state. Blocked stories are visible in `prd.json` and surfaced by the CLI (`sugar status`).
 
 ### Resumability
 
@@ -110,58 +119,158 @@ The workflow is fully resumable. If a session is interrupted mid-Phase 3:
 
 1. Invoke `/phase` with the same task
 2. Tell it to start from Phase 3c
-3. Each phase's Ralph loop picks up from the first story where `passes: false`
+3. Each phase's Ralph loop picks up from the first story where `status` is `"pending"` or `"rejected"`
 4. `progress.txt` preserves all prior learnings
 
 No special recovery steps needed.
 
 ---
 
+## Install
+
+### One command (recommended)
+
+[`npx skills`](https://github.com/JuliusBrussee/skills) supports 40+ agents — Claude Code, GitHub Copilot, Cursor, Windsurf, Cline, and more:
+
+```bash
+npx skills add sucre-cando/sugar
+```
+
+To install for a specific agent:
+
+```bash
+npx skills add sucre-cando/sugar -a claude-code
+npx skills add sucre-cando/sugar -a github-copilot
+npx skills add sucre-cando/sugar -a cursor
+npx skills add sucre-cando/sugar -a windsurf
+npx skills add sucre-cando/sugar -a cline
+npx skills add sucre-cando/sugar -a codex
+npx skills add sucre-cando/sugar -a opencode
+npx skills add sucre-cando/sugar -a gemini
+```
+
+### Manual install
+
+<details>
+<summary>Claude Code</summary>
+
+```bash
+# Install as a plugin
+claude plugin add /path/to/sugar
+
+# Or clone and copy skills
+git clone https://github.com/sucre-cando/sugar .claude/plugins/sugar
+```
+
+</details>
+
+<details>
+<summary>GitHub Copilot — Custom Agents (recommended)</summary>
+
+```bash
+mkdir -p .github/agents
+cp sugar/.github/agents/*.md .github/agents/
+
+# Optionally copy base instructions
+cp sugar/AGENTS.md ./AGENTS.md
+cp sugar/.github/copilot-instructions.md .github/
+```
+
+</details>
+
+<details>
+<summary>GitHub Copilot — Prompt Files (alternative)</summary>
+
+```bash
+mkdir -p .github/prompts
+cp sugar/.github/prompts/*.prompt.md .github/prompts/
+```
+
+</details>
+
+<details>
+<summary>Cursor</summary>
+
+```bash
+mkdir -p .cursor/rules
+cp sugar/.cursor/rules/*.mdc .cursor/rules/
+```
+
+</details>
+
+<details>
+<summary>Windsurf</summary>
+
+```bash
+mkdir -p .windsurf/rules
+cp sugar/.windsurf/rules/*.md .windsurf/rules/
+```
+
+</details>
+
+<details>
+<summary>Cline</summary>
+
+```bash
+mkdir -p .cline/rules
+cp sugar/.cline/rules/*.md .cline/rules/
+```
+
+</details>
+
+<details>
+<summary>Codex</summary>
+
+```bash
+cp -r sugar/.agents/skills .agents/skills
+```
+
+</details>
+
+<details>
+<summary>OpenCode</summary>
+
+```bash
+# Option A: Copy OpenCode agents
+mkdir -p .opencode/agents
+cp sugar/.opencode/agents/*.md .opencode/agents/
+
+# Option B: Claude Code skills (OpenCode reads these natively)
+cp -r sugar/.claude/skills .claude/skills
+```
+
+</details>
+
+<details>
+<summary>Gemini CLI</summary>
+
+```bash
+cp -r sugar/.gemini .gemini
+cp sugar/GEMINI.md ./GEMINI.md
+```
+
+</details>
+
+---
+
 ## Quick start
 
-### Claude Code
-
 ```bash
-# Clone into your project or add as a plugin
-git clone https://github.com/<your-org>/orchestration-skills .claude/plugins/orchestration-skills
-
-# Or copy the skill directly
-cp -r orchestration-skills/.claude/skills/orchestrate .claude/skills/orchestrate
-
-# Invoke
+# Claude Code
 /phase refactor the auth module into separate concerns with full test coverage
-```
+/debug investigate why login fails after password reset
+/review check the auth refactor PR
+/tdd implement the rate limiter with tests first
+/brainstorm ideas for a real-time collaboration feature
+/worktree create a worktree for the auth refactor
+/finish prepare the auth branch for PR
+/respond-review address the review comments on PR #42
 
-### GitHub Copilot — Custom Agents (recommended)
+# GitHub Copilot
+@phase refactor the auth module into separate concerns
+@debug investigate why login fails after password reset
 
-```bash
-# Copy agent profiles into your project
-mkdir -p .github/agents
-cp orchestration-skills/.github/agents/phase.md .github/agents/
-cp orchestration-skills/.github/agents/prd.md .github/agents/
-cp orchestration-skills/.github/agents/ralph.md .github/agents/
-
-# Optionally copy the base instructions
-cp orchestration-skills/AGENTS.md ./AGENTS.md
-cp orchestration-skills/.github/copilot-instructions.md .github/
-
-# Invoke via Copilot Chat
-@phase refactor the auth module into separate concerns with full test coverage
-@prd plan a new notification system
-@ralph convert tasks/prd-notifications.md
-```
-
-### GitHub Copilot — Prompt Files (alternative)
-
-```bash
-# Copy prompt files into your project
-mkdir -p .github/prompts
-cp orchestration-skills/.github/prompts/phase.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/prd.prompt.md .github/prompts/
-cp orchestration-skills/.github/prompts/ralph.prompt.md .github/prompts/
-
-# Invoke via Copilot Chat
-/phase refactor the auth module into separate concerns with full test coverage
+# Cursor / Windsurf / Cline — auto-matched by description
 ```
 
 ---
@@ -201,16 +310,18 @@ Three sub-phases:
 **3c — Implementation**: each phase runs the Ralph agent loop:
 
 ```
-1. Read prd.json
+1. Read prd.json + failure_log.json
 2. Read progress.txt (check Codebase Patterns first)
-3. Pick highest priority story where passes: false
-4. Implement that single story
-5. Run quality checks
-6. Commit: feat: US-001 - Story Title
-7. Set passes: true in prd.json
-8. Append learnings to progress.txt
-9. Repeat until all stories pass
-10. Push branch to origin
+3. Pick highest priority incomplete story
+4. Create snapshot tag (attempt-US-XXX-v1)
+5. Implement that single story
+6. Run 6-step quality protocol
+7. Legacy: commit if passing / Consensus: STORY_IMPLEMENTED → verifier quorum → tally votes
+8. Update prd.json (status: "passed")
+9. Log model + result to progress.txt
+10. Model escalation check (2+ failures → upgrade model)
+11. Repeat until all stories pass
+12. Push branch to origin
 ```
 
 In Claude Code, independent phases launch as parallel subagents. In Copilot, phases run sequentially (or the user opens multiple sessions for parallel work).
@@ -256,19 +367,34 @@ Each phase declares what it produces and consumes. Hard dependencies are blockin
 ### Error recovery
 3-attempt retry with diagnosis. If stuck: record blocker, reset changes, move to next story. The workflow is fully resumable from any interruption point.
 
+### Model tiering
+The ralph-loop.sh starts with a cost-effective model (e.g., Sonnet) and auto-escalates to a more capable model after 2 consecutive failures. De-escalates back after a success. Each phase can specify its own default model: `ralph-loop.sh 20 sonnet`. Balances cost and capability.
+
+### Consensus verification
+Raft-inspired verification built into every phase. After implementation, a quorum of independent verifier agents review the code and cast VOTE:PASS or VOTE:FAIL. A required majority must pass before the story is committed. Rejected stories return to "rejected" status with feedback in rejection_log.txt.
+
+### Iron laws
+Three inviolable rules enforced in every CLAUDE.md: (1) ONE STORY per iteration — no "while I'm here" additions, (2) NEVER COMMIT BROKEN code — every commit must pass all quality checks, (3) READ PROGRESS.TXT FIRST — check codebase patterns before writing. A rationalization table helps agents catch self-deceptive shortcuts like "these two stories are small, I'll do both."
+
+### Rollback & snapshot tags
+Before each implementation attempt, a snapshot tag (`attempt-US-001-v1`) is created. On 3rd failure, a structured report is written to `failure_log.json`. Future agents read this to try a different approach rather than repeating the same mistake.
+
 ---
 
 ## Managed files
 
 | File | Location | Created in | Purpose |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `plan.md` | repo root | Phase 1 | Execution plan, dependency map, risks |
 | `todo.md` | repo root | Phase 1 | Task breakdown with checkboxes |
 | `execution.md` | repo root | Phase 3b | Dependency graph, parallel groups, execution order |
-| `prd.json` | each phase workspace | Phase 3b | Ralph-format user stories (state machine: passes true/false) |
+| `prd.json` | each phase workspace | Phase 3b | Ralph-format user stories (consensus state machine: status lifecycle) |
 | `progress.txt` | each phase workspace | Phase 2 | Progress log with learnings and codebase patterns |
 | `CLAUDE.md` | each phase workspace | Phase 3b | Ralph agent instructions (one story per invocation) |
 | `ralph-loop.sh` | each phase workspace | Phase 3b | Iteration loop — spawns fresh agents per story |
+| `VERIFY.md` | each phase workspace | Phase 3b | Verifier agent instructions + vote format |
+| `patterns.json` | repo root | Phase 3c (between groups) | Structured codebase patterns for propagation |
+| `failure_log.json` | each phase workspace | Phase 3b | Structured failure reports for retry strategy |
 | `merge_order.md` | repo root | Phase 4 | Merge sequence and conflict expectations |
 
 ---
@@ -337,27 +463,52 @@ Tracking files in the main repo (`plan.md`, `todo.md`, `execution.md`) are prese
 
 ```
 AGENTS.md                     <-- Copilot coding agent instructions (repo-level)
+GEMINI.md                     <-- Gemini CLI instructions (imports from .gemini/skills/)
 docs/
   flowchart.html              <-- Interactive workflow flowchart (open in browser)
+  pressure_testing.md         <-- Pressure-testing framework for skills
 .claude/
   skills/
     orchestrate/SKILL.md     <-- /phase — main orchestration skill
     prd/SKILL.md              <-- /prd — PRD generator
     ralph/SKILL.md            <-- /ralph — PRD to prd.json converter
+    debug/SKILL.md            <-- /debug — systematic debugging skill
+    review/SKILL.md           <-- /review — adversarial code review skill
+    tdd/SKILL.md              <-- /tdd — test-driven development skill
+    brainstorm/SKILL.md       <-- /brainstorm — feature brainstorming skill
+    worktree/SKILL.md         <-- /worktree — git worktree management skill
+    finish/SKILL.md           <-- /finish — branch finishing / PR prep skill
+    respond-review/SKILL.md   <-- /respond-review — receiving code review skill
 .claude-plugin/
   plugin.json                 <-- installable as Claude Code plugin
 .github/
-  agents/
-    phase.md                  <-- @phase — orchestration custom agent
-    prd.md                    <-- @prd — PRD generator custom agent
-    ralph.md                  <-- @ralph — PRD converter custom agent
+  agents/                     <-- Copilot custom agents (10 agents)
+    phase.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    brainstorm.md, worktree.md, finish.md, respond-review.md
   copilot-instructions.md    <-- Copilot base instructions
-  prompts/
-    phase.prompt.md           <-- /phase for Copilot (prompt file)
-    prd.prompt.md             <-- /prd for Copilot (prompt file)
-    ralph.prompt.md           <-- /ralph for Copilot (prompt file)
+  prompts/                    <-- Copilot prompt files (10 prompts)
+    phase.prompt.md, prd.prompt.md, ralph.prompt.md, debug.prompt.md,
+    review.prompt.md, tdd.prompt.md, brainstorm.prompt.md,
+    worktree.prompt.md, finish.prompt.md, respond-review.prompt.md
+.cursor/
+  rules/                      <-- Cursor rules (10 .mdc files)
+    orchestrate.mdc, prd.mdc, ralph.mdc, debug.mdc, review.mdc,
+    tdd.mdc, brainstorm.mdc, worktree.mdc, finish.mdc, respond-review.mdc
+.agents/
+  skills/                     <-- Codex skills (10 skills)
+    orchestrate/, prd/, ralph/, debug/, review/, tdd/,
+    brainstorm/, worktree/, finish/, respond-review/
+.opencode/
+  agents/                     <-- OpenCode agents (10 agents)
+    orchestrate.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    brainstorm.md, worktree.md, finish.md, respond-review.md
+  config.json                 <-- OpenCode project config
+.gemini/
+  skills/                     <-- Gemini CLI skills (10 .md files)
+    orchestrate.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    brainstorm.md, worktree.md, finish.md, respond-review.md
 src/
-  index.ts                    <-- CLI (validate prd.json, report status)
+  index.ts                    <-- CLI (validate, status, dashboard, brainstorm)
   types.ts                    <-- TypeScript types (Ralph prd.json format)
 ```
 
@@ -369,7 +520,7 @@ Each phase workspace is a complete Ralph environment:
 /tmp/myapp-phases/phase-a-types/
   ralph-loop.sh    <-- Iteration loop (spawns fresh agents per story)
   CLAUDE.md        <-- Agent instructions (one story per invocation)
-  prd.json         <-- User stories (state machine: passes true/false)
+  prd.json         <-- User stories (consensus state machine: status lifecycle)
   progress.txt     <-- Progress log + codebase patterns
   (repo files via git worktree)
 ```
@@ -400,28 +551,31 @@ wait
 
 ```bash
 # Install in any Claude Code project
-claude plugin add /path/to/orchestration-skills
+claude plugin add /path/to/sugar
 
 # Or clone and reference
-git clone <repo-url> ~/.claude/plugins/orchestration-skills
+git clone <repo-url> ~/.claude/plugins/sugar
 ```
 
-### CLI utility
-
-The TypeScript CLI validates `prd.json` files and reports phase completion status:
+### CLI
 
 ```bash
-npm install
-npm run build
+npm install && npm run build
 
-# Validate a prd.json file (checks required fields, story ordering, acceptance criteria)
-node dist/index.js validate /tmp/myapp-phases/phase-a-types/prd.json
+# Validate a prd.json file
+sugar validate /tmp/myapp-phases/phase-a-types/prd.json
 
 # Show story completion status for a single phase
-node dist/index.js status /tmp/myapp-phases/phase-a-types/prd.json
+sugar status /tmp/myapp-phases/phase-a-types/prd.json
 
 # Scan all phase workspaces and show aggregate progress
-node dist/index.js status-all /tmp/myapp-phases
+sugar status-all /tmp/myapp-phases
+
+# Generate interactive HTML dashboard and open in browser
+sugar dashboard /tmp/myapp-phases
+
+# Generate interactive brainstorm HTML for a feature
+sugar brainstorm "Add real-time collaboration to the editor"
 ```
 
 Example `status-all` output:
@@ -437,18 +591,24 @@ Phase Workspace Status: /tmp/myapp-phases
 
 ---
 
-## Platform differences
+## Platform support
 
-| Capability | Claude Code | GitHub Copilot |
-|---|---|---|
-| Invoke | `/phase <task>` | `@phase <task>` (agent) or `/phase <task>` (prompt) |
-| Parallel subagents | Native (Agent tool) | Manual (multiple sessions) |
-| Task tracking | TaskCreate + file-based | File-based only |
-| Workspaces | Full repo copy | git worktree preferred |
-| Auto-trigger | Yes (description match) | No (manual invoke only) |
-| Agent profiles | `.claude/skills/` | `.github/agents/` |
+All 10 skills are available on 8 platforms:
 
-The workflow, Ralph pattern, managed files, and execution discipline are identical across both platforms.
+| Platform | Skill location | Invoke syntax | Notes |
+| --- | --- | --- | --- |
+| **Claude Code** | `.claude/skills/<name>/SKILL.md` | `/phase <task>` | Native plugin. Parallel subagents via Agent tool. |
+| **GitHub Copilot** | `.github/agents/<name>.md` + `.github/prompts/<name>.prompt.md` | `@phase <task>` or `/phase <task>` | Custom agents (recommended) or prompt files. |
+| **Cursor** | `.cursor/rules/<name>.mdc` | Agent-requested (description match) | Rules with intelligent matching. `alwaysApply: false`. |
+| **Windsurf** | `.windsurf/rules/<name>.md` | Agent-requested (description match) | Rules with intelligent matching. |
+| **Cline** | `.cline/rules/<name>.md` | Agent-requested (description match) | Rules with intelligent matching. |
+| **Codex** | `.agents/skills/<name>/SKILL.md` | Implicit (description match) | Native skill format. Hierarchical with `AGENTS.md`. |
+| **OpenCode** | `.opencode/agents/<name>.md` | Agent-requested | Also reads `.claude/skills/` natively (zero-config). |
+| **Gemini CLI** | `.gemini/skills/<name>.md` via `GEMINI.md` | Context-loaded | Skills imported via `@` syntax in `GEMINI.md`. |
+
+All platforms also installable via `npx skills add sucre-cando/sugar -a <platform>`.
+
+The workflow, Ralph pattern, managed files, and execution discipline are identical across all platforms.
 
 ---
 

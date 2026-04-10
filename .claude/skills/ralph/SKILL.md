@@ -28,7 +28,9 @@ Converts existing PRDs to `prd.json` — the format that drives Ralph-style auto
         "Typecheck passes"
       ],
       "priority": 1,
-      "passes": false,
+      "status": "pending",
+      "term": 0,
+      "votes": [],
       "notes": ""
     }
   ]
@@ -84,9 +86,54 @@ Bad: "Works correctly"
 1. Each user story becomes one JSON entry
 2. IDs: Sequential (US-001, US-002, etc.)
 3. Priority: Based on dependency order, then document order
-4. All stories: `passes: false` and empty `notes`
+4. All stories start with `status: "pending"`, `term: 0`, `votes: []`, and empty `notes`
 5. branchName: Derive from feature name, kebab-case
 6. Always add "Typecheck passes" to every story
+
+---
+
+## Red Flags — If You Catch Yourself Thinking:
+
+| Thought | Reality |
+|---|---|
+| "This story is small enough to combine with the next one" | If it has its own acceptance criteria, it's its own story. |
+| "I don't need Typecheck passes for this one" | EVERY story includes "Typecheck passes". No exceptions. |
+| "This description is obvious, no need for detail" | An agent with ZERO context will read this. Be explicit. |
+
+---
+
+## Consensus Format Example
+
+For consensus mode, add a `consensus` config to the prd.json root and set initial story fields:
+
+```json
+{
+  "project": "my-app",
+  "branchName": "phase-a-feature",
+  "description": "Feature with consensus verification",
+  "consensus": {
+    "quorumSize": 3,
+    "requiredMajority": 2,
+    "implementModel": "sonnet",
+    "verifyModel": "sonnet",
+    "escalationModel": "opus",
+    "maxTerms": 5
+  },
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Example story",
+      "description": "As a developer, I need...",
+      "acceptanceCriteria": ["Criterion 1", "Typecheck passes"],
+      "priority": 1,
+      "status": "pending",
+      "term": 0,
+      "votes": [],
+      "notes": ""
+    }
+  ]
+}
+```
 
 ---
 

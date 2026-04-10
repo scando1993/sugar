@@ -1,0 +1,117 @@
+---
+description: "Git worktree management for parallel branch development. Use when creating, listing, switching, syncing, or cleaning up git worktrees for isolated workspaces."
+alwaysApply: false
+---
+
+# Git Worktree Management
+
+## Iron Law
+`NEVER MODIFY FILES IN A WORKTREE YOU DID NOT CREATE`
+
+---
+
+## Operations
+
+### 1. Create
+Create a new worktree with an isolated branch.
+
+```bash
+# Create worktree with new branch
+git worktree add /tmp/<repo>-phases/<name> -b <branch-name>
+
+# Create worktree from existing branch
+git worktree add /tmp/<repo>-phases/<name> <existing-branch>
+```
+
+Rules:
+- Always use `/tmp/<repo>-phases/` as the base directory for worktrees
+- Branch naming: `phase-a-<scope>`, `phase-b-<scope>`, etc.
+- One worktree per phase, one branch per phase
+- Verify the worktree was created: `ls /tmp/<repo>-phases/<name>`
+
+### 2. List
+Show all active worktrees.
+
+```bash
+git worktree list
+```
+
+Check for:
+- Stale worktrees (directories that no longer exist)
+- Worktrees on unexpected branches
+- Worktrees that should have been cleaned up
+
+### 3. Switch
+Move between worktrees safely.
+
+```bash
+# Navigate to a worktree
+cd /tmp/<repo>-phases/<name>
+
+# Verify you are in the right place
+git branch --show-current
+pwd
+```
+
+Rules:
+- Always verify the current branch after switching
+- Never assume you are in the right worktree -- check with `pwd` and `git branch`
+
+### 4. Sync
+Bring a worktree up to date with another branch.
+
+```bash
+# From inside the worktree
+git fetch origin
+git rebase origin/main
+# Or merge if rebase is not appropriate
+git merge origin/main
+```
+
+Rules:
+- Always fetch before rebasing or merging
+- If conflicts arise, resolve them in the worktree where they appear
+- Run quality checks after syncing to catch integration issues
+
+### 5. Cleanup
+Remove worktrees and prune stale references.
+
+```bash
+# Remove a specific worktree
+git worktree remove /tmp/<repo>-phases/<name>
+
+# Force remove if there are uncommitted changes (use with caution)
+git worktree remove /tmp/<repo>-phases/<name> --force
+
+# Prune stale worktree references
+git worktree prune
+
+# Optionally delete the branch
+git branch -D <branch-name>
+```
+
+Rules:
+- Check for uncommitted work before removing: `cd /tmp/<repo>-phases/<name> && git status`
+- Prune after removing worktrees to keep git clean
+- Only force-remove if you are certain no work will be lost
+
+---
+
+## Red Flags
+
+| Thought | Reality |
+|---|---|
+| "I'll just edit files in this other worktree quickly" | Each worktree is someone's workspace. Do not touch it. |
+| "I don't need to clean up, the worktrees are in /tmp" | Stale worktree refs persist in git. Always prune. |
+| "I'll reuse this worktree for a different task" | Create a new worktree. Reusing leads to branch confusion. |
+| "I'll skip the status check before removing" | Uncommitted work is lost forever on force-remove. Always check. |
+
+---
+
+## Rules
+
+- NEVER modify files in a worktree you did not create
+- ALWAYS verify your current worktree before making changes
+- ALWAYS check for uncommitted work before cleanup
+- Keep worktree paths consistent: `/tmp/<repo>-phases/<name>`
+- One branch per worktree, one worktree per branch

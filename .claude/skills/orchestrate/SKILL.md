@@ -16,6 +16,8 @@ $ARGUMENTS
 
 Subagent execution follows the **[Ralph](https://github.com/snarktank/ralph)** pattern. Each phase workspace is a self-contained Ralph environment: `CLAUDE.md` (agent instructions), `prd.json` (story state machine), `progress.txt` (learning persistence). Subagents are autonomous — they read their workspace instructions and execute independently.
 
+The **Sugar** library (`src/lib/`) is the source of truth for all execution logic. Skills delegate to `sugar` CLI commands for workspace management, story state, consensus, and pattern propagation.
+
 ---
 
 ## Prompt reinforcement
@@ -74,19 +76,14 @@ Only start after explicit user approval.
 
 ### Actions
 
+Use the Sugar CLI to create workspaces:
+
 ```bash
-mkdir -p /tmp/<repo-name>-phases
-# For each phase:
-git worktree add /tmp/<repo-name>-phases/<phase-name> -b <branch-name>
-```
+# Create workspace for each phase
+sugar workspace create <phase-name>
 
-In each workspace, initialize:
-
-**`progress.txt`:**
-```
-# Phase Progress Log
-Started: [timestamp]
----
+# List created workspaces
+sugar workspace list
 ```
 
 Branch naming: `phase-a-<scope>`, `phase-b-<scope>`, etc.
@@ -125,169 +122,35 @@ Build the dependency graph. Identify **parallel groups**, **sequential chains**,
 
 ### Phase 3b — Generate execution.md, prd.json, and CLAUDE.md per workspace
 
-#### Create `execution.md` at repo root
+The Sugar library generates all workspace files. Use the `Orchestrator` class or CLI commands:
 
-1. **Dependency graph** — ASCII visualization
-2. **Parallel execution groups** — Group 1 (no deps), Group 2 (after Group 1), etc.
-3. **Execution order** — numbered groups with satisfied dependencies noted
-4. **Critical path** — bottleneck analysis
-5. **Risk assessment** — conflict likelihood, shared files
-6. **Rationale** — why this order is safest
+```bash
+# Initialize config if not present
+sugar config init
 
-#### Generate `prd.json` in each workspace
-
-Use the `/ralph` skill approach: convert each phase's tasks from `todo.md` into right-sized user stories.
-
-```json
-{
-  "project": "[repo name]",
-  "branchName": "[phase branch]",
-  "description": "[phase scope]",
-  "userStories": [
-    {
-      "id": "US-001",
-      "title": "[title]",
-      "description": "As a developer, I need [what] so that [why]",
-      "acceptanceCriteria": ["Criterion", "Typecheck passes"],
-      "priority": 1,
-      "passes": false,
-      "notes": ""
-    }
-  ]
-}
+# The orchestrator generates: execution.md, prd.json, CLAUDE.md, VERIFY.md, ralph-loop.sh per workspace
 ```
+
+For each workspace, the library generates:
+- **`prd.json`** — Ralph-format user stories with consensus state machine
+- **`CLAUDE.md`** — Agent instructions with iron laws, quality protocol, red flags
+- **`VERIFY.md`** — Verifier agent instructions with vote format
+- **`ralph-loop.sh`** — Iteration engine that spawns fresh agents per story
+- **`execution.md`** at repo root — dependency graph, parallel groups, model strategy
 
 **Story rules:** completable in one pass, ordered by dependency (schema → backend → UI), verifiable criteria, always include "Typecheck passes".
 
-#### Generate `CLAUDE.md` in each workspace
-
-Write a `CLAUDE.md` file in each phase workspace root. This is the Ralph agent instructions that the subagent will follow autonomously.
-
-**Template for each workspace CLAUDE.md:**
-
-Each iteration handles **ONE story** — just like Ralph. The `ralph-loop.sh` script (below) handles spawning fresh instances.
-
-```markdown
-# Ralph Agent — [Phase Name]
-
-You are an autonomous coding agent. You handle ONE user story per invocation.
-
-## Your Task
-
-1. Read `prd.json` in this directory
-2. Read `progress.txt` — check the Codebase Patterns section first
-3. Verify you are on branch `[branch-name]`. If not: `git checkout [branch-name]`
-4. Pick the **highest priority** user story where `passes: false`
-5. If no stories remain with `passes: false` → reply with: PHASE_COMPLETE
-6. Implement that single user story
-7. Run quality checks (typecheck, lint, test — whatever the project uses)
-8. If checks pass → commit ALL changes: `feat: [Story ID] - [Story Title]`
-9. If checks fail → fix and retry (up to 3 attempts). If stuck:
-   - Set the story's `notes` field in prd.json to describe the blocker
-   - Append failure to progress.txt
-   - `git checkout -- .` to reset unstaged changes
-10. Update `prd.json` to set `passes: true` for the completed story
-11. Append progress to `progress.txt` (format below)
-12. When ALL stories have `passes: true` → push: `git push origin [branch-name]`
-
-## Stop Condition
-
-After completing a story, check if ALL stories have `passes: true`.
-If yes, push and reply with exactly: PHASE_COMPLETE
-If no, end your response normally — the loop script will spawn a fresh iteration.
-
-## Progress Report Format
-
-APPEND to progress.txt (never replace):
-
-## [Date/Time] - [Story ID]
-- What was implemented
-- Files changed
-- **Learnings:**
-  - Patterns discovered
-  - Gotchas encountered
-  - Useful context for other phases
----
-
-## Codebase Patterns
-
-If you discover a reusable pattern, add it to the `## Codebase Patterns`
-section at the TOP of progress.txt. Only general, reusable patterns.
-
-## Rules
-- ONE story per iteration — implement one, then stop
-- ALL commits must pass quality checks
-- Do NOT commit broken code
-- Follow existing code patterns
-- Keep changes focused to this phase's scope
-
-## Context
-- Original task: [full $ARGUMENTS]
-- Phase scope: [scope from plan.md]
-- Workspace: [absolute path]
-- Branch: [branch-name]
-- Dependencies satisfied: [list what prior phases produced, or "none — first parallel group"]
-- Patterns from prior phases: [codebase patterns from completed phases, or "none yet"]
-
-## Task (repeated)
-Read prd.json. Pick highest priority story where passes is false. Implement ONE story.
-Quality checks. Commit. Mark passes true. Append progress. Stop. The loop handles iteration.
-```
-
-#### Generate `ralph-loop.sh` in each workspace
-
-This is the iteration engine — equivalent to Ralph's `ralph.sh`. It spawns fresh agent instances in a loop, one story per iteration, until all stories pass or max iterations is reached.
-
-```bash
-#!/bin/bash
-# Ralph loop for phase: [phase-name]
-# Usage: ./ralph-loop.sh [max_iterations]
-set -e
-
-MAX_ITERATIONS=${1:-20}
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PRD_FILE="$SCRIPT_DIR/prd.json"
-
-echo "Starting Ralph loop — Phase: [phase-name]"
-echo "Max iterations: $MAX_ITERATIONS"
-
-for i in $(seq 1 $MAX_ITERATIONS); do
-  echo ""
-  echo "========================================"
-  echo "  Iteration $i of $MAX_ITERATIONS"
-  echo "========================================"
-
-  OUTPUT=$(claude --dangerously-skip-permissions --print < "$SCRIPT_DIR/CLAUDE.md" 2>&1 | tee /dev/stderr) || true
-
-  if echo "$OUTPUT" | grep -q "PHASE_COMPLETE"; then
-    echo ""
-    echo "Phase [phase-name] complete at iteration $i!"
-    exit 0
-  fi
-
-  echo "Iteration $i done. Continuing..."
-  sleep 2
-done
-
-echo ""
-echo "Reached max iterations ($MAX_ITERATIONS) without completing all stories."
-echo "Check prd.json and progress.txt for status."
-exit 1
-```
-
-Make it executable: `chmod +x ralph-loop.sh`
-
 #### Rules
-- Every workspace must have four files: `prd.json`, `progress.txt`, `CLAUDE.md`, `ralph-loop.sh`
+- Every workspace must have: `prd.json`, `progress.txt`, `CLAUDE.md`, `ralph-loop.sh`, `VERIFY.md`
 - Do not proceed to 3c until all workspaces are fully set up
-- Validate each `prd.json` is valid JSON with right-sized stories
+- Validate each `prd.json`: `sugar validate <workspace>/prd.json`
 
 ---
 
 ### Phase 3c — Parallel execution via ralph-loop.sh
 
 #### Goal
-Launch the Ralph iteration loop for each phase in parallel. Each `ralph-loop.sh` spawns fresh agent instances — one story per iteration, fresh context each time — just like Ralph's `ralph.sh`.
+Launch the Ralph iteration loop for each phase in parallel.
 
 #### How iteration works
 
@@ -299,54 +162,45 @@ ralph-loop.sh (the loop — runs in bash)
   └── Loop exits successfully
 ```
 
-Each iteration is a **fresh agent instance with clean context**. Memory persists between iterations via:
-- `prd.json` — which stories are done (`passes: true/false`)
+Each iteration is a **fresh agent instance with clean context**. Memory persists via:
+- `prd.json` — which stories are done (`status: "passed"/"pending"/"rejected"`)
 - `progress.txt` — learnings and codebase patterns
 - git history — all committed code
 
-This is identical to how Ralph works. The agent never runs out of context because it handles only ONE story per invocation.
-
-#### Resuming after interruption
-Inherently resumable — re-run `ralph-loop.sh`. It spawns fresh iterations that pick up from the first `passes: false` story.
-
 #### Execution
 
-Follow `execution.md` group ordering.
-
-**For each parallel group** (independent phases), launch all `ralph-loop.sh` scripts simultaneously:
+Follow `execution.md` group ordering. Launch ralph loops per group:
 
 ```bash
 # Launch all independent phases in parallel
-/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 &
-PID_A=$!
-/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 &
-PID_B=$!
-/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 &
-PID_C=$!
+/tmp/<repo>-phases/phase-a/ralph-loop.sh 20 sonnet &
+/tmp/<repo>-phases/phase-b/ralph-loop.sh 20 sonnet &
+wait
 
-# Wait for all to complete
-wait $PID_A $PID_B $PID_C
+# Propagate patterns between groups
+sugar propagate-patterns --base /tmp/<repo>-phases
 
-# Check results
-echo "Phase A exit: $?"
-echo "Phase B exit: $?"
-echo "Phase C exit: $?"
+# Launch next group
+/tmp/<repo>-phases/phase-c/ralph-loop.sh 20 sonnet &
+wait
 ```
 
-Use the Bash tool to execute this. Each `ralph-loop.sh` runs independently, spawning fresh `claude` instances per story.
+The `ralph-loop.sh` uses Sugar CLI for state management:
+- `sugar pick-story` — get next story
+- `sugar story-update` — update story status in prd.json
+- `sugar snapshot` — create git snapshot tag before each attempt
 
-**For sequential groups** (depend on prior group):
-Wait for the prior group to complete. Before launching the next group:
-1. Collect Codebase Patterns from all completed workspaces' `progress.txt`
-2. Update the next group's `CLAUDE.md` files with those patterns
-3. Update `execution.md` with actual results
-4. Launch the next group's `ralph-loop.sh` scripts in parallel
+#### Model selection per phase
+- **Sonnet** (default): Well-scoped implementation tasks
+- **Haiku**: Mechanical tasks — config changes, boilerplate
+- **Opus**: Complex architectural decisions, ambiguous requirements
+
+Auto-escalates to Opus on 2+ consecutive failures.
 
 #### Completion tracking
-- Phase complete when `ralph-loop.sh` exits 0 (all stories `passes: true`)
-- After each group, sync results back to `todo.md` checkboxes
-- Record any deviations in `execution.md`
-- If a loop exits non-zero (max iterations), check `prd.json` for blocked stories
+- Phase complete when `ralph-loop.sh` exits 0
+- After each group: `sugar propagate-patterns` to extract and inject patterns
+- Monitor progress: `sugar status-all /tmp/<repo>-phases`
 
 #### Rules
 - Never launch a dependent phase before prerequisites are confirmed complete
@@ -367,44 +221,55 @@ Only start after explicit user approval.
 
 ### Actions
 
-Create `merge_order.md` at repo root:
+The orchestrator generates `merge_order.md`:
+
+```bash
+# View workspace status first
+sugar status-all /tmp/<repo>-phases
+```
+
+Create `merge_order.md` at repo root with:
 - merge order aligned with dependency graph (foundations first)
 - rationale for ordering
 - expected conflict areas
 - conflict resolution notes
 - validation steps after each merge
-- post-merge sanity checklist
-
-**Manual merge:** stop after creating `merge_order.md`.
 
 **Automatic merge:**
 - Merge in documented order
 - Resolve conflicts using best engineering judgment
+- Validate after each merge: run quality checks
 - Update `merge_order.md` with actual conflict notes
-- Validate after each merge
 
 ### Post-merge validation
-
-After all merges, run full validation:
-1. Complete test suite
-2. Typecheck, lint, quality checks
-3. If any fail, document which merge caused it in `merge_order.md`
-4. Fix before declaring Phase 4 complete
-
 Phase 4 is **not complete** until the final merged result passes all checks.
+
+### Cleanup
+
+```bash
+sugar workspace cleanup
+```
 
 ---
 
-## Abort and cleanup
+## Iron Laws
 
-```bash
-git worktree list
-git worktree remove /tmp/<repo>-phases/<phase> --force
-git branch -D <branch>
-git worktree prune
-```
+Three inviolable rules enforced in every workspace:
 
-Repo-root tracking files preserved. Phase-local files deleted with worktree.
+1. **ONE STORY per iteration** — no "while I'm here" additions
+2. **NEVER COMMIT BROKEN code** — every commit must pass all quality checks
+3. **READ PROGRESS.TXT FIRST** — check codebase patterns before writing
+
+## Red Flags — If You Catch Yourself Thinking:
+
+| Thought | Reality |
+|---|---|
+| "I'll just implement two quick stories in one iteration" | ONE story per iteration. The loop handles iteration. No exceptions. |
+| "The tests mostly pass, I'll commit and fix later" | ALL commits must pass quality checks. Broken commits poison every future iteration. |
+| "This dependency isn't really needed, I'll skip it" | The dependency graph exists for a reason. Never start dependent work before prerequisites complete. |
+| "I know what changed, I don't need to read progress.txt" | Progress.txt IS your memory. You have NO context without it. Read it FIRST. |
+| "This is a trivial change, I don't need to run checks" | Every commit gets checked. No exceptions. The one you skip is the one that breaks everything. |
+| "I'll refactor this while I'm here" | Stay in scope. Implement the story. Nothing more. |
 
 ---
 
@@ -452,6 +317,8 @@ Repo-root tracking files preserved. Phase-local files deleted with worktree.
 | `progress.txt` | each worktree | Phase 2 |
 | `CLAUDE.md` | each worktree | Phase 3b |
 | `ralph-loop.sh` | each worktree | Phase 3b |
+| `VERIFY.md` | each worktree | Phase 3b |
+| `patterns.json` | repo root | Phase 3c (between groups) |
 | `merge_order.md` | repo root | Phase 4 |
 
 ---
