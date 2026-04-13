@@ -6,6 +6,8 @@ Built for **Claude Code**, **GitHub Copilot**, **Cursor**, **Windsurf**, **Cline
 
 Based on the [Ralph](https://github.com/snarktank/ralph) autonomous agent pattern.
 
+> **Plugin name:** `sugar` · **Version:** 1.0.0 · **Author:** Vector
+
 ---
 
 ## Interactive Workflow Flowchart
@@ -117,7 +119,7 @@ No story is left in a broken state. Blocked stories are visible in `prd.json` an
 
 The workflow is fully resumable. If a session is interrupted mid-Phase 3:
 
-1. Invoke `/phase` with the same task
+1. Invoke `/sugar` with the same task
 2. Tell it to start from Phase 3c
 3. Each phase's Ralph loop picks up from the first story where `status` is `"pending"` or `"rejected"`
 4. `progress.txt` preserves all prior learnings
@@ -257,7 +259,7 @@ cp sugar/GEMINI.md ./GEMINI.md
 
 ```bash
 # Claude Code
-/phase refactor the auth module into separate concerns with full test coverage
+/sugar refactor the auth module into separate concerns with full test coverage
 /debug investigate why login fails after password reset
 /review check the auth refactor PR
 /tdd implement the rate limiter with tests first
@@ -267,7 +269,7 @@ cp sugar/GEMINI.md ./GEMINI.md
 /respond-review address the review comments on PR #42
 
 # GitHub Copilot
-@phase refactor the auth module into separate concerns
+@sugar refactor the auth module into separate concerns
 @debug investigate why login fails after password reset
 
 # Cursor / Windsurf / Cline — auto-matched by description
@@ -404,7 +406,7 @@ Before each implementation attempt, a snapshot tag (`attempt-US-001-v1`) is crea
 ### Large refactor
 
 ```
-/phase Refactor the payments module into separate services: billing, invoicing,
+/sugar Refactor the payments module into separate services: billing, invoicing,
 and subscriptions. Each service should have its own data access layer and tests.
 ```
 
@@ -413,7 +415,7 @@ The skill will plan three implementation phases (one per service), analyze their
 ### Testing strategy
 
 ```
-/phase Create a comprehensive unit and integration testing strategy for the
+/sugar Create a comprehensive unit and integration testing strategy for the
 user authentication flow, then implement all tests.
 ```
 
@@ -422,7 +424,7 @@ Phase 1 produces a testing plan. Phase 3 generates a `prd.json` with one story p
 ### Migration
 
 ```
-/phase Migrate the database from MySQL to PostgreSQL. Include schema conversion,
+/sugar Migrate the database from MySQL to PostgreSQL. Include schema conversion,
 query adapter updates, data migration scripts, and rollback procedures.
 ```
 
@@ -431,13 +433,13 @@ The skill identifies the sequential dependency chain (schema first, then adapter
 ### Resume from a specific phase
 
 ```
-/phase Setup is done, workspaces and branches are ready. Execute the implementation.
+/sugar Setup is done, workspaces and branches are ready. Execute the implementation.
 ```
 
 Skips to Phase 3, starting with dependency analysis.
 
 ```
-/phase All phase branches are complete. Create merge instructions and merge automatically.
+/sugar All phase branches are complete. Create merge instructions and merge automatically.
 ```
 
 Skips to Phase 4.
@@ -469,7 +471,7 @@ docs/
   pressure_testing.md         <-- Pressure-testing framework for skills
 .claude/
   skills/
-    orchestrate/SKILL.md     <-- /phase — main orchestration skill
+    orchestrate/SKILL.md     <-- /sugar — main orchestration skill
     prd/SKILL.md              <-- /prd — PRD generator
     ralph/SKILL.md            <-- /ralph — PRD to prd.json converter
     debug/SKILL.md            <-- /debug — systematic debugging skill
@@ -597,8 +599,8 @@ All 10 skills are available on 8 platforms:
 
 | Platform | Skill location | Invoke syntax | Notes |
 | --- | --- | --- | --- |
-| **Claude Code** | `.claude/skills/<name>/SKILL.md` | `/phase <task>` | Native plugin. Parallel subagents via Agent tool. |
-| **GitHub Copilot** | `.github/agents/<name>.md` + `.github/prompts/<name>.prompt.md` | `@phase <task>` or `/phase <task>` | Custom agents (recommended) or prompt files. |
+| **Claude Code** | `.claude/skills/<name>/SKILL.md` | `/sugar <task>` | Native plugin. Parallel subagents via Agent tool. |
+| **GitHub Copilot** | `.github/agents/<name>.md` + `.github/prompts/<name>.prompt.md` | `@sugar <task>` or `/sugar <task>` | Custom agents (recommended) or prompt files. |
 | **Cursor** | `.cursor/rules/<name>.mdc` | Agent-requested (description match) | Rules with intelligent matching. `alwaysApply: false`. |
 | **Windsurf** | `.windsurf/rules/<name>.md` | Agent-requested (description match) | Rules with intelligent matching. |
 | **Cline** | `.cline/rules/<name>.md` | Agent-requested (description match) | Rules with intelligent matching. |
