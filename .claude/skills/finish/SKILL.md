@@ -67,6 +67,7 @@ Push the branch and create the pull request.
 | "I'll squash everything into one commit" | Atomic commits tell a story. Squash only fixups, not meaningful changes. |
 | "The PR description can be brief, reviewers will read the code" | Reviewers need context. A good description saves review time. |
 | "I'll fix that in a follow-up PR" | Fix it now. Follow-up PRs get deprioritized and forgotten. |
+| "All tests pass" | Do they? Check for `.skip`, `.only`, `xit`, `xdescribe`, `@Disabled`, or `#[ignore]`. Skipped tests are invisible failures. |
 
 ## Rules
 - All quality checks must pass before creating a PR
