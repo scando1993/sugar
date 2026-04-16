@@ -6,7 +6,7 @@ Built for **Claude Code**, **GitHub Copilot**, **Cursor**, **Windsurf**, **Cline
 
 Based on the [Ralph](https://github.com/snarktank/ralph) autonomous agent pattern.
 
-> **Plugin name:** `sugar` · **Version:** 1.0.0 · **Author:** Vector
+> **Plugin name:** `sugar` · **Version:** 1.0.0 · **Author:** scando1993
 
 ---
 
@@ -135,20 +135,20 @@ No special recovery steps needed.
 [`npx skills`](https://github.com/JuliusBrussee/skills) supports 40+ agents — Claude Code, GitHub Copilot, Cursor, Windsurf, Cline, and more:
 
 ```bash
-npx skills add sucre-cando/sugar
+npx skills add scando1993/sugar
 ```
 
 To install for a specific agent:
 
 ```bash
-npx skills add sucre-cando/sugar -a claude-code
-npx skills add sucre-cando/sugar -a github-copilot
-npx skills add sucre-cando/sugar -a cursor
-npx skills add sucre-cando/sugar -a windsurf
-npx skills add sucre-cando/sugar -a cline
-npx skills add sucre-cando/sugar -a codex
-npx skills add sucre-cando/sugar -a opencode
-npx skills add sucre-cando/sugar -a gemini
+npx skills add scando1993/sugar -a claude-code
+npx skills add scando1993/sugar -a github-copilot
+npx skills add scando1993/sugar -a cursor
+npx skills add scando1993/sugar -a windsurf
+npx skills add scando1993/sugar -a cline
+npx skills add scando1993/sugar -a codex
+npx skills add scando1993/sugar -a opencode
+npx skills add scando1993/sugar -a gemini
 ```
 
 ### Manual install
@@ -161,7 +161,7 @@ npx skills add sucre-cando/sugar -a gemini
 claude plugin add /path/to/sugar
 
 # Or clone and copy skills
-git clone https://github.com/sucre-cando/sugar .claude/plugins/sugar
+git clone https://github.com/scando1993/sugar .claude/plugins/sugar
 ```
 
 </details>
@@ -485,11 +485,11 @@ docs/
   plugin.json                 <-- installable as Claude Code plugin
 .github/
   agents/                     <-- Copilot custom agents (10 agents)
-    phase.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
+    sugar.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
     brainstorm.md, worktree.md, finish.md, respond-review.md
   copilot-instructions.md    <-- Copilot base instructions
   prompts/                    <-- Copilot prompt files (10 prompts)
-    phase.prompt.md, prd.prompt.md, ralph.prompt.md, debug.prompt.md,
+    sugar.prompt.md, prd.prompt.md, ralph.prompt.md, debug.prompt.md,
     review.prompt.md, tdd.prompt.md, brainstorm.prompt.md,
     worktree.prompt.md, finish.prompt.md, respond-review.prompt.md
 .cursor/
@@ -608,7 +608,7 @@ All 10 skills are available on 8 platforms:
 | **OpenCode** | `.opencode/agents/<name>.md` | Agent-requested | Also reads `.claude/skills/` natively (zero-config). |
 | **Gemini CLI** | `.gemini/skills/<name>.md` via `GEMINI.md` | Context-loaded | Skills imported via `@` syntax in `GEMINI.md`. |
 
-All platforms also installable via `npx skills add sucre-cando/sugar -a <platform>`.
+All platforms also installable via `npx skills add scando1993/sugar -a <platform>`.
 
 The workflow, Ralph pattern, managed files, and execution discipline are identical across all platforms.
 

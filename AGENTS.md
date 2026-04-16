@@ -16,7 +16,7 @@ This repository contains reusable skills for phased software engineering executi
 src/                      TypeScript CLI (validate prd.json, report status)
 ```
 
-Three skills: **orchestrate** (`/phase`), **prd** (`/prd`), **ralph** (`/ralph`).
+Three skills: **orchestrate** (`/sugar`), **prd** (`/prd`), **ralph** (`/ralph`).
 
 ## Commands
 

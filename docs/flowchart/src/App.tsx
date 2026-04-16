@@ -80,7 +80,7 @@ const allSteps: {
   type?: 'custom' | 'decision' | 'gate';
 }[] = [
   // Phase 1
-  { id: '1', label: '/phase <your task>',        description: 'Invoke the orchestration skill',                         phase: 'setup' },
+  { id: '1', label: '/sugar <your task>',        description: 'Invoke the orchestration skill',                         phase: 'setup' },
   { id: '2', label: 'Phase 1 — Planning',         description: 'Produce plan.md + todo.md · no code written',           phase: 'phase1' },
   { id: '3', label: 'User approval gate',         description: 'Review plan before any code is written',                phase: 'phase1', type: 'gate' },
   // Phase 2

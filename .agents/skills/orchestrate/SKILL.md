@@ -1,5 +1,5 @@
 ---
-name: orchestrate
+name: sugar
 description: "Phased software engineering execution for large refactors, migrations, feature work, testing efforts, and modularization. Executes through strict planning, workspace setup, dependency analysis, PRD-driven parallel implementation, and merge phases. Each subagent runs in an isolated Ralph workspace (CLAUDE.md + prd.json + progress.txt) and executes the Ralph agent loop autonomously. Use when a task needs isolated workspaces, atomic commits, parallel branches, and controlled merge sequencing."
 ---
 

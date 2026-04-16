@@ -128,7 +128,7 @@ This ensures the generated execution.md documents which model is assigned to eac
 
 ## Step 5: Sync to Copilot agent
 
-**File:** `.github/agents/phase.md`
+**File:** `.github/agents/sugar.md`
 
 Apply Steps 1-4 changes. This file already has retry/backoff in its ralph-loop.sh template — merge the model tiering variables and escalation logic INTO the existing retry structure.
 
@@ -142,10 +142,10 @@ Both go in the loop but at different check points.
 
 ## Step 6: Sync to Copilot prompt
 
-**File:** `.github/prompts/phase.prompt.md`
+**File:** `.github/prompts/sugar.prompt.md`
 
 Apply Steps 1-4 changes. This file has a simpler ralph-loop.sh — bring it to parity:
-1. Add retry/backoff logic (matching phase.md)
+1. Add retry/backoff logic (matching sugar.md)
 2. Add model tiering variables and escalation
 3. Update claude invocation with `--model`
 
@@ -170,8 +170,8 @@ Step 5 + 6 (sync to Copilot — parallel, different files)
 | File | Changes |
 |---|---|
 | `.claude/skills/orchestrate/SKILL.md` | Steps 1, 2, 3, 4 |
-| `.github/agents/phase.md` | Step 5 |
-| `.github/prompts/phase.prompt.md` | Step 6 |
+| `.github/agents/sugar.md` | Step 5 |
+| `.github/prompts/sugar.prompt.md` | Step 6 |
 
 No new files. No TypeScript changes. This is purely template updates in markdown skill files.
 
@@ -188,6 +188,6 @@ No new files. No TypeScript changes. This is purely template updates in markdown
 | STORY_FAILED signal documented | Verify CLAUDE.md template includes model escalation section |
 | Launch examples updated | Verify Phase 3c shows `ralph-loop.sh 20 sonnet` |
 | Execution.md template updated | Verify item 7 (model strategy) in template |
-| Copilot agent synced | Diff phase.md against SKILL.md — all template changes present |
-| Copilot prompt synced | Diff phase.prompt.md against SKILL.md — all template changes present |
+| Copilot agent synced | Diff sugar.md against SKILL.md — all template changes present |
+| Copilot prompt synced | Diff sugar.prompt.md against SKILL.md — all template changes present |
 | Backward compatible | Verify `ralph-loop.sh 20` (no model arg) defaults to sonnet |

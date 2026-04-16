@@ -6,7 +6,7 @@ Each implementation phase follows the Ralph agent pattern (https://github.com/sn
 
 Key files to understand:
 - `.claude/skills/orchestrate/SKILL.md` — the Claude Code version of the skill
-- `.github/prompts/phase.prompt.md` — the Copilot version of the skill
+- `.github/prompts/sugar.prompt.md` — the Copilot version of the skill
 - `src/` — TypeScript CLI utilities for plan validation
 
 When working in this repo, follow the phased execution discipline: plan before coding, isolate work per phase, commit atomically, and track progress in managed files (`plan.md`, `todo.md`, `execution.md`, `prd.json`, `progress.txt`, `merge_order.md`).

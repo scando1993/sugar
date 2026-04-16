@@ -95,7 +95,7 @@ This plan implements both features from `docs/model_tiering_strategy.md` and `do
 
 ## Step 6: Sync to Copilot agent
 
-**File:** `.github/agents/phase.md`
+**File:** `.github/agents/sugar.md`
 
 Apply all template changes from Steps 4-5. Preserve existing differences:
 - Uses `[user's task]` variable syntax
@@ -106,11 +106,11 @@ Apply all template changes from Steps 4-5. Preserve existing differences:
 
 ## Step 7: Sync to Copilot prompt
 
-**File:** `.github/prompts/phase.prompt.md`
+**File:** `.github/prompts/sugar.prompt.md`
 
 Apply all template changes from Steps 4-5. Preserve existing differences:
 - Uses `${input}` variable syntax
-- Has simpler ralph-loop.sh (bring to parity with phase.md retry logic + new features)
+- Has simpler ralph-loop.sh (bring to parity with sugar.md retry logic + new features)
 - Uses `read_file`/`write_file`/`edit_file`/`codebase_search`/`run_in_terminal`/`run_tests` tool names
 
 ---

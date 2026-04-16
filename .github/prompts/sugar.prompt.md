@@ -1,17 +1,23 @@
 ---
-name: phase
-description: "Phased software engineering execution — planning, workspace setup, dependency analysis, PRD-driven parallel implementation (Ralph pattern), and merge. Drives large refactors, migrations, feature work, and testing through strict multi-phase workflow."
+name: 'sugar'
+description: 'Phased software engineering execution — planning, workspace setup, dependency analysis, PRD-driven parallel implementation (Ralph pattern), and merge. Each phase gets a full Ralph workspace (CLAUDE.md + prd.json + progress.txt) for autonomous execution.'
+agent: 'agent'
 tools:
-  - "read"
-  - "edit"
-  - "search"
-  - "terminal"
-  - "test-runner"
+  - 'read_file'
+  - 'write_file'
+  - 'edit_file'
+  - 'codebase_search'
+  - 'run_in_terminal'
+  - 'run_tests'
+argument-hint: '<engineering task description>'
 ---
 
 # Phased Software Engineering Execution
 
-You are an orchestration agent that drives complex engineering tasks through a strict multi-phase workflow. Each phase requires explicit user approval before proceeding.
+## Task
+${input}
+
+---
 
 ## Reference
 
@@ -19,15 +25,19 @@ Subagent execution follows the **Ralph** pattern (https://github.com/snarktank/r
 
 The **Sugar** library (`src/lib/`) is the source of truth for all execution logic. Skills delegate to `sugar` CLI commands for workspace management, story state, consensus, and pattern propagation. Do not embed procedural bash scripts or Python one-liners — use Sugar CLI instead.
 
+---
+
 ## Prompt reinforcement
 
 Use **prompt repetition** at every decision boundary: state the task, provide context, give the instruction, restate context briefly, repeat the instruction. Apply at skill level, per-phase, and per-story.
+
+---
 
 ## Core behavior
 
 Execute in **strict phases**. Never proceed without **explicit user approval**.
 
-Before every phase: **"The original task is: [user's task]. This phase's goal is: [goal]."**
+Before every phase: **"The original task is: ${input}. This phase's goal is: [goal]."**
 
 ---
 
@@ -35,6 +45,8 @@ Before every phase: **"The original task is: [user's task]. This phase's goal is
 
 ### Goal
 Produce `plan.md` and `todo.md`. No code.
+
+**Restate**: The original task is `${input}`. Planning only.
 
 ### Actions
 
@@ -53,6 +65,8 @@ Create `todo.md`: small actionable tasks grouped by phase, checkboxes, dependenc
 ### Goal
 Create isolated Ralph workspaces per phase.
 
+**Restate**: The original task is `${input}`. Create worktrees, no implementation.
+
 ### Actions
 
 Use the Sugar CLI to create workspaces:
@@ -67,16 +81,13 @@ sugar workspace list
 
 Branch naming: `phase-a-<scope>`, `phase-b-<scope>`, etc.
 
-### Rules
-- One worktree per phase, one branch per phase
-- Do not start implementation unless user approves Phase 3
-- Document setup problems in `plan.md`
-
 ---
 
 ## Phase 3 — Analysis, PRD generation, and parallel implementation
 
-Sub-phases: **3a -> 3b -> 3c**.
+**Restate**: The original task is `${input}`. Analyze dependencies, generate Ralph workspaces, launch parallel subagents.
+
+Sub-phases: **3a → 3b → 3c**.
 
 ---
 
@@ -105,7 +116,7 @@ For each workspace, the library generates:
 - **`ralph-loop.sh`** — Iteration engine that spawns fresh agents per story
 - **`execution.md`** at repo root — dependency graph, parallel groups, model strategy
 
-**Story rules:** completable in one pass, ordered by dependency (schema -> backend -> UI), verifiable criteria, always include "Typecheck passes".
+**Story rules:** completable in one pass, ordered by dependency (schema → backend → UI), verifiable criteria, always include "Typecheck passes".
 
 #### `patterns.json` schema (repo root, populated between groups)
 
@@ -138,10 +149,10 @@ Each `ralph-loop.sh` spawns fresh agent instances in a loop — one story per it
 
 ```
 ralph-loop.sh
-  |- Iteration 1: claude < CLAUDE.md -> implements US-001 -> exits
-  |- Iteration 2: claude < CLAUDE.md -> implements US-002 -> exits
-  |- Iteration 3: claude < CLAUDE.md -> outputs PHASE_COMPLETE
-  '- Loop exits 0
+  ├── Iteration 1: claude < CLAUDE.md → implements US-001 → exits
+  ├── Iteration 2: claude < CLAUDE.md → implements US-002 → exits
+  ├── Iteration 3: claude < CLAUDE.md → outputs PHASE_COMPLETE
+  └── Loop exits 0
 ```
 
 Memory persists via `prd.json` (state), `progress.txt` (learnings), and git (code).
@@ -176,8 +187,6 @@ The `ralph-loop.sh` uses Sugar CLI for state management:
 
 Auto-escalates to Opus on 2+ consecutive failures.
 
-If `claude` CLI is not available, open one Copilot session per workspace and run each Ralph loop manually — do not start all sessions at the same time.
-
 #### Completion tracking
 - Phase complete when `ralph-loop.sh` exits 0
 - After each group: `sugar propagate-patterns` to extract and inject patterns
@@ -192,12 +201,14 @@ If `claude` CLI is not available, open one Copilot session per workspace and run
 
 ## Phase 4 — Merge
 
-Create `merge_order.md`: merge order, rationale, expected conflicts, resolution notes, validation steps, post-merge checklist.
+**Restate**: The original task is `${input}`. All phases complete. Merge safely.
 
 ```bash
 # View workspace status first
 sugar status-all /tmp/<repo>-phases
 ```
+
+Create `merge_order.md`: merge order, rationale, expected conflicts, resolution notes, validation steps, post-merge checklist.
 
 **Manual:** stop after `merge_order.md`.
 
@@ -285,4 +296,4 @@ sugar workspace cleanup
 
 **First deliverable is always Phase 1 planning only.**
 
-Read the user's task. Produce `plan.md` and `todo.md`. Stop. Wait for approval.
+**Restate**: Given `${input}` — Phase 1. Produce `plan.md` and `todo.md`. Stop. Wait.

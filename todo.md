@@ -121,7 +121,7 @@ _Depends on: Phase D_
 
 ### E2 — GitHub Copilot (`.github/agents/` + `.github/prompts/`)
 - [x] Sync thinned-down logic from Claude Code skills
-- [x] Verify `@phase` agent still works
+- [x] Verify `@sugar` agent still works
 
 ### E3 — Cursor (`.cursor/rules/`)
 - [x] Sync thinned-down logic

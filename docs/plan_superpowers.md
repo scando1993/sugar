@@ -12,8 +12,8 @@ The competitive analysis (`comparison_superpowers.md`) identified 9 features (A-
 
 **Files to modify (6):**
 - `.claude/skills/orchestrate/SKILL.md` — add to CLAUDE.md template section
-- `.github/agents/phase.md` — same, Copilot syntax
-- `.github/prompts/phase.prompt.md` — same, Copilot prompt syntax
+- `.github/agents/sugar.md` — same, Copilot syntax
+- `.github/prompts/sugar.prompt.md` — same, Copilot prompt syntax
 - `.claude/skills/ralph/SKILL.md` — add to conversion rules
 - `.github/agents/ralph.md` — same
 - `.github/prompts/ralph.prompt.md` — same
@@ -53,8 +53,8 @@ After the "Rules" section, insert:
 
 **Files to modify (3):**
 - `.claude/skills/orchestrate/SKILL.md` — CLAUDE.md template
-- `.github/agents/phase.md` — CLAUDE.md template
-- `.github/prompts/phase.prompt.md` — CLAUDE.md template
+- `.github/agents/sugar.md` — CLAUDE.md template
+- `.github/prompts/sugar.prompt.md` — CLAUDE.md template
 
 **Replace** the current single-step "Run quality checks" instruction (step 7 in CLAUDE.md template) with:
 
@@ -284,8 +284,8 @@ user-invocable: true
 
 **Files to modify (3):**
 - `.claude/skills/orchestrate/SKILL.md` — ralph-loop.sh template + CLAUDE.md template
-- `.github/agents/phase.md` — same
-- `.github/prompts/phase.prompt.md` — same
+- `.github/agents/sugar.md` — same
+- `.github/prompts/sugar.prompt.md` — same
 
 **Changes to ralph-loop.sh template:**
 
@@ -321,8 +321,8 @@ Add instruction: "Before implementing a story, check `failure_log.json`. If this
 
 **Files to modify (3):**
 - `.claude/skills/orchestrate/SKILL.md` — Phase 3b and Phase 3c sections
-- `.github/agents/phase.md` — same
-- `.github/prompts/phase.prompt.md` — same
+- `.github/agents/sugar.md` — same
+- `.github/prompts/sugar.prompt.md` — same
 
 **Add patterns.json schema to Phase 3b generation:**
 
@@ -382,8 +382,8 @@ G is fully independent and can be done at any point.
 | File | Steps |
 |---|---|
 | `.claude/skills/orchestrate/SKILL.md` | A, B, C, H, I |
-| `.github/agents/phase.md` | A, B, C, H, I |
-| `.github/prompts/phase.prompt.md` | A, B, C, H, I |
+| `.github/agents/sugar.md` | A, B, C, H, I |
+| `.github/prompts/sugar.prompt.md` | A, B, C, H, I |
 | `.claude/skills/ralph/SKILL.md` | A |
 | `.github/agents/ralph.md` | A |
 | `.github/prompts/ralph.prompt.md` | A |
