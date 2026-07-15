@@ -14,8 +14,12 @@ export class ConsensusEngine {
   tallyVotes(votes: Vote[]): { passed: boolean; passCount: number; failCount: number } {
     const passCount = votes.filter(v => v.result === 'pass').length;
     const failCount = votes.filter(v => v.result === 'fail').length;
+    // A short vote count (a verifier crashed, was skipped, etc.) must never
+    // pass just because the votes that DID come in happened to clear the
+    // majority threshold — that's not a quorum, it's a subset of one.
+    const quorumMet = votes.length >= this.quorumSize;
     return {
-      passed: passCount >= this.requiredMajority,
+      passed: quorumMet && passCount >= this.requiredMajority,
       passCount,
       failCount,
     };

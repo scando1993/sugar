@@ -10,7 +10,9 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
-    "test": "tsc -p tsconfig.test.json && node --test dist/tests/*.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist/tests/*.test.js",
+    "sync-skills": "node scripts/sync-skills.ts",
+    "sync-skills:check": "node scripts/sync-skills.ts --check"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

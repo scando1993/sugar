@@ -87,7 +87,7 @@ Phase 3 runs three sequential sub-phases:
 
 - **`failure_log.json`** in each phase workspace — structured failure reports (storyId, attempt, filesModified, failureType, lastError). Created after 3 failed attempts on a story. Future agents read this to try a different approach.
 
-The `ralph-loop.sh` script supports **model tiering**: it starts with a default model (e.g., Sonnet), automatically escalates to a more capable model (e.g., Opus) after 2 consecutive failures, and de-escalates back after a success. Before each attempt, a snapshot tag (`attempt-US-001-v1`) is created for clean rollback.
+`sugar run` (which `ralph-loop.sh` now just execs into) supports **model tiering**: it starts with a default model (e.g., Sonnet), automatically escalates to a more capable model (e.g., Opus) after 2 consecutive failures, and de-escalates back after a success — this state persists in `.sugar-state.json` so a resumed run doesn't reset it. Before each attempt, a snapshot tag namespaced by phase and story (`sugar/phase-a-types/US-001/attempt-1`) is created for clean rollback, so parallel phases never collide on the same tag.
 
 **3c — Parallel execution**: launches the Ralph loops according to the dependency graph:
 
@@ -307,26 +307,23 @@ Three sub-phases:
 
 **3a — Dependency analysis**: reads `plan.md` and maps what each phase produces, consumes, and depends on. Identifies parallel groups, sequential chains, and the critical path.
 
-**3b — Execution plan + PRDs**: creates `execution.md` (dependency graph, parallel groups, execution order, risk assessment) and generates a `prd.json` in each phase workspace with Ralph-format user stories.
+**3b — Execution plan + PRDs**: `sugar generate --phases phases.json` creates `execution.md` (dependency graph, parallel groups, execution order, risk assessment) and generates a `prd.json`, `CLAUDE.md`, `VERIFY.md`, and `ralph-loop.sh` in each phase workspace with Ralph-format user stories.
 
-**3c — Implementation**: each phase runs the Ralph agent loop:
+**3c — Implementation**: each phase runs `sugar run <workspace>`, which owns the entire loop:
 
 ```
-1. Read prd.json + failure_log.json
-2. Read progress.txt (check Codebase Patterns first)
-3. Pick highest priority incomplete story
-4. Create snapshot tag (attempt-US-XXX-v1)
-5. Implement that single story
-6. Run 6-step quality protocol
-7. Legacy: commit if passing / Consensus: STORY_IMPLEMENTED → verifier quorum → tally votes
-8. Update prd.json (status: "passed")
-9. Log model + result to progress.txt
-10. Model escalation check (2+ failures → upgrade model)
-11. Repeat until all stories pass
-12. Push branch to origin
+1. Pick the highest-priority pending/rejected story, claim it (status: "implementing")
+2. Create a namespaced snapshot tag (sugar/<phase>/<story-id>/attempt-<n>)
+3. Spawn a fresh implementer agent (reads prd.json + progress.txt + failure_log.json first)
+4. Read its result: implemented / failed / no signal — all three resolve the story, none leave it stuck
+5. If implemented: spawn the verifier quorum against VERIFY.md, tally votes
+6. On consensus PASS: commit, mark "passed", de-escalate model on success
+7. On consensus FAIL: reset the working tree, mark "rejected" (or "blocked" past maxTerms), escalate model after repeated failures
+8. Log result to progress.txt and persist model-tier/attempt state to .sugar-state.json
+9. Repeat until no pending/rejected stories remain → exit complete (all passed) or stuck (some blocked)
 ```
 
-In Claude Code, independent phases launch as parallel subagents. In Copilot, phases run sequentially (or the user opens multiple sessions for parallel work).
+In Claude Code, independent phases launch as parallel subagents, each backgrounding its own `sugar run` call (a foreground `&`/`wait` would exceed the Bash tool's execution cap). In Copilot, phases run sequentially (or the user opens multiple sessions for parallel work).
 
 ### Phase 4 — Merge
 
@@ -370,7 +367,7 @@ Each phase declares what it produces and consumes. Hard dependencies are blockin
 3-attempt retry with diagnosis. If stuck: record blocker, reset changes, move to next story. The workflow is fully resumable from any interruption point.
 
 ### Model tiering
-The ralph-loop.sh starts with a cost-effective model (e.g., Sonnet) and auto-escalates to a more capable model after 2 consecutive failures. De-escalates back after a success. Each phase can specify its own default model: `ralph-loop.sh 20 sonnet`. Balances cost and capability.
+`sugar run` starts with a cost-effective model (e.g., Sonnet) and auto-escalates to a more capable model after 2 consecutive failures. De-escalates back after a success. Each phase can specify its own default model: `sugar run <workspace> --model sonnet`. State persists in `.sugar-state.json` so a resumed run continues from the same tier instead of resetting. Balances cost and capability.
 
 ### Consensus verification
 Raft-inspired verification built into every phase. After implementation, a quorum of independent verifier agents review the code and cast VOTE:PASS or VOTE:FAIL. A required majority must pass before the story is committed. Rejected stories return to "rejected" status with feedback in rejection_log.txt.
@@ -379,7 +376,7 @@ Raft-inspired verification built into every phase. After implementation, a quoru
 Three inviolable rules enforced in every CLAUDE.md: (1) ONE STORY per iteration — no "while I'm here" additions, (2) NEVER COMMIT BROKEN code — every commit must pass all quality checks, (3) READ PROGRESS.TXT FIRST — check codebase patterns before writing. A rationalization table helps agents catch self-deceptive shortcuts like "these two stories are small, I'll do both."
 
 ### Rollback & snapshot tags
-Before each implementation attempt, a snapshot tag (`attempt-US-001-v1`) is created. On 3rd failure, a structured report is written to `failure_log.json`. Future agents read this to try a different approach rather than repeating the same mistake.
+Before each implementation attempt, a snapshot tag namespaced by phase and story (`sugar/<phase>/<story-id>/attempt-<n>`) is created, so parallel phase worktrees never collide on the same tag. On 3rd failure, a structured report is written to `failure_log.json`. Future agents read this to try a different approach rather than repeating the same mistake.
 
 ---
 
@@ -393,8 +390,9 @@ Before each implementation attempt, a snapshot tag (`attempt-US-001-v1`) is crea
 | `prd.json` | each phase workspace | Phase 3b | Ralph-format user stories (consensus state machine: status lifecycle) |
 | `progress.txt` | each phase workspace | Phase 2 | Progress log with learnings and codebase patterns |
 | `CLAUDE.md` | each phase workspace | Phase 3b | Ralph agent instructions (one story per invocation) |
-| `ralph-loop.sh` | each phase workspace | Phase 3b | Iteration loop — spawns fresh agents per story |
+| `ralph-loop.sh` | each phase workspace | Phase 3b | Thin wrapper that execs `sugar run` for this workspace |
 | `VERIFY.md` | each phase workspace | Phase 3b | Verifier agent instructions + vote format |
+| `.sugar-state.json` | each phase workspace | Phase 3c | Model-tier state + per-story attempt counters, written/updated by `sugar run` every iteration |
 | `patterns.json` | repo root | Phase 3c (between groups) | Structured codebase patterns for propagation |
 | `failure_log.json` | each phase workspace | Phase 3b | Structured failure reports for retry strategy |
 | `merge_order.md` | repo root | Phase 4 | Merge sequence and conflict expectations |
@@ -510,8 +508,18 @@ docs/
     orchestrate.md, prd.md, ralph.md, debug.md, review.md, tdd.md,
     brainstorm.md, worktree.md, finish.md, respond-review.md
 src/
-  index.ts                    <-- CLI (validate, status, dashboard, brainstorm)
-  types.ts                    <-- TypeScript types (Ralph prd.json format)
+  index.ts                    <-- CLI entry: validate, status(-all), dashboard, brainstorm,
+                                   config, workspace, generate, run, verify, pick-story,
+                                   story-update, snapshot, propagate-patterns
+  types.ts                    <-- TypeScript types (Ralph prd.json format, PhaseDefinition, SugarConfig)
+  lib/
+    orchestrator.ts            <-- workspace-file generation, dependency graph, merge order
+    loop-runner.ts             <-- `sugar run` — owns the entire Ralph iteration loop
+    verifier.ts                <-- `sugar verify` — verifier quorum + consensus tally
+    consensus.ts, ralph-loop.ts, model-tier.ts, dependency.ts, patterns.ts, workspace.ts
+    config.ts                  <-- config loading/merging, repo-root resolution
+    agent-runner.ts             <-- spawns implementer/verifier agents
+    templates/                 <-- CLAUDE.md / VERIFY.md / ralph-loop.sh generators
 ```
 
 ### How subagents work
@@ -520,34 +528,35 @@ Each phase workspace is a complete Ralph environment:
 
 ```
 /tmp/myapp-phases/phase-a-types/
-  ralph-loop.sh    <-- Iteration loop (spawns fresh agents per story)
-  CLAUDE.md        <-- Agent instructions (one story per invocation)
-  prd.json         <-- User stories (consensus state machine: status lifecycle)
-  progress.txt     <-- Progress log + codebase patterns
+  ralph-loop.sh      <-- Thin wrapper: exec sugar run "$SCRIPT_DIR" ...
+  CLAUDE.md          <-- Agent instructions (one story per invocation)
+  prd.json           <-- User stories (consensus state machine: status lifecycle)
+  progress.txt       <-- Progress log + codebase patterns
+  .sugar-state.json  <-- Model-tier + per-story attempt counters (written by `sugar run`)
   (repo files via git worktree)
 ```
 
-The iteration model is identical to Ralph's `ralph.sh`:
+The iteration model is conceptually identical to Ralph's `ralph.sh`, but the loop itself — story picking, claiming, snapshotting, spawning the implementer, spawning the verifier quorum, committing, escalating — is owned by the `sugar` CLI (`sugar run`), not bash:
 
 ```
-ralph-loop.sh (bash loop)
-  |-- Iteration 1: claude < CLAUDE.md --> implements US-001 --> exits
-  |-- Iteration 2: claude < CLAUDE.md --> implements US-002 --> exits
-  |-- Iteration 3: claude < CLAUDE.md --> outputs PHASE_COMPLETE
-  \-- Loop exits successfully
+sugar run <workspace>
+  |-- Iteration 1: claims US-001 --> implementer agent --> verifier quorum --> commit on PASS
+  |-- Iteration 2: claims US-002 --> ...
+  |-- Iteration 3: claims US-003 --> ...
+  \-- No pending/rejected stories left --> exits: complete (all passed) or stuck (some blocked)
 ```
 
-Each iteration is a **fresh agent instance with clean context**. The agent handles ONE story, then stops. Memory persists via `prd.json` (state), `progress.txt` (learnings), and git (code). This prevents context exhaustion on large phases.
+Each implementer/verifier invocation is a **fresh agent instance with clean context**. Memory persists via `prd.json` (state), `progress.txt` (learnings), `.sugar-state.json` (model tier/attempts), and git (code, plus namespaced snapshot tags). This prevents context exhaustion on large phases.
 
-**Both Claude Code and Copilot** launch parallel `ralph-loop.sh` scripts:
+**In Claude Code**, launch each phase's loop as its own backgrounded tool call rather than `&`-joining several inside one foreground command — `sugar run` can run for many minutes and a foreground `wait` across phases exceeds the Bash tool's execution cap:
 
 ```bash
-# Launch all independent phases in parallel
-/tmp/myapp-phases/phase-a-types/ralph-loop.sh 20 &
-/tmp/myapp-phases/phase-b-api/ralph-loop.sh 20 &
-/tmp/myapp-phases/phase-c-ui/ralph-loop.sh 20 &
-wait
+sugar run /tmp/myapp-phases/phase-a-types --max-iterations 20   # background
+sugar run /tmp/myapp-phases/phase-b-api --max-iterations 20     # background
+sugar run /tmp/myapp-phases/phase-c-ui --max-iterations 20      # background
 ```
+
+**In Copilot** (and other platforms without a background-execution primitive), run these sequentially, or open multiple sessions for parallel work.
 
 ### Installing as a plugin
 
@@ -562,7 +571,20 @@ git clone <repo-url> ~/.claude/plugins/sugar
 ### CLI
 
 ```bash
-npm install && npm run build
+./scripts/install.sh   # npm install && npm run build && npm link
+
+# Create sugar.config.json (models, quorum size, workspaceBasePath, permissionMode, ...)
+sugar config init
+
+# Create workspaces (Phase 2), then generate their prd.json/CLAUDE.md/VERIFY.md/ralph-loop.sh (Phase 3b)
+sugar workspace create phase-a-types
+sugar generate --phases phases.json --task "Refactor the payments module"
+
+# Run the Ralph loop for a workspace until complete/stuck/max-iterations (Phase 3c)
+sugar run /tmp/myapp-phases/phase-a-types --max-iterations 20 --model sonnet
+
+# Run just the verifier quorum for one story (also called internally by `sugar run`)
+sugar verify --story US-001 --workspace /tmp/myapp-phases/phase-a-types
 
 # Validate a prd.json file
 sugar validate /tmp/myapp-phases/phase-a-types/prd.json
@@ -610,7 +632,7 @@ All 10 skills are available on 8 platforms:
 
 All platforms also installable via `npx skills add scando1993/sugar -a <platform>`.
 
-The workflow, Ralph pattern, managed files, and execution discipline are identical across all platforms.
+The planning, PRD generation, dependency analysis, and managed-files layer (Phases 1–3b) are identical across all platforms — they're plain CLI commands and markdown. **Phase 3c's autonomous loop is not**: `sugar run` spawns the implementer/verifier agents via the `runnerBin` configured in `sugar.config.json` (default: `claude`), using that CLI's own flags (`--model`, `--print`, `--permission-mode`). It works out of the box with Claude Code. Using it with another agent CLI requires that CLI to accept an equivalent flag set, or adapting `src/lib/agent-runner.ts`. Platforms without a compatible CLI can still use Sugar through Phase 3b (generate the workspaces and PRDs), then implement each story manually or with that platform's own agent.
 
 ---
 

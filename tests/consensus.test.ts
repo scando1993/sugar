@@ -81,6 +81,18 @@ describe('ConsensusEngine', () => {
       assert.equal(result.passed, true);
       assert.equal(result.passCount, 3);
     });
+
+    it('does not pass on a short vote count even if the majority threshold is cleared', () => {
+      const engine = new ConsensusEngine(3, 2);
+      // Only 2 of 3 verifiers voted (one crashed/was skipped) — 2 passes
+      // clears requiredMajority=2, but quorumSize=3 was never met.
+      const result = engine.tallyVotes([
+        { term: 0, verifier: 1, result: 'pass' },
+        { term: 0, verifier: 2, result: 'pass' },
+      ]);
+      assert.equal(result.passed, false);
+      assert.equal(result.passCount, 2);
+    });
   });
 
   describe('runConsensusRound', () => {
