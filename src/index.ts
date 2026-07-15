@@ -2,13 +2,17 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrdJson, UserStory, ValidationError, DEFAULT_CONFIG, SugarConfig, StoryStatus } from './types';
+import { PrdJson, UserStory, ValidationError, DEFAULT_CONFIG, StoryStatus, PhaseDefinition } from './types';
 import { Orchestrator } from './lib/orchestrator';
 import { ConsensusEngine } from './lib/consensus';
 import { RalphLoop } from './lib/ralph-loop';
 import { ModelTier } from './lib/model-tier';
 import { WorkspaceManager } from './lib/workspace';
 import { PatternManager } from './lib/patterns';
+import { loadConfig, findRepoRoot, resolveWorkspaceBasePath } from './lib/config';
+import { createAgentRunner } from './lib/agent-runner';
+import { Verifier } from './lib/verifier';
+import { LoopRunner } from './lib/loop-runner';
 
 // ============================================================
 // Existing functionality (validate, status, dashboard, brainstorm)
@@ -531,22 +535,13 @@ function generateBrainstorm(description: string): void {
 // ============================================================
 
 function configInit(): void {
-  const configPath = path.join(process.cwd(), 'sugar.config.json');
+  const configPath = path.join(findRepoRoot(), 'sugar.config.json');
   if (fs.existsSync(configPath)) {
     console.log('sugar.config.json already exists.');
     return;
   }
   fs.writeFileSync(configPath, JSON.stringify(DEFAULT_CONFIG, null, 2));
   console.log('Created sugar.config.json with defaults.');
-}
-
-function loadConfig(): SugarConfig {
-  const configPath = path.join(process.cwd(), 'sugar.config.json');
-  if (fs.existsSync(configPath)) {
-    const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    return { ...DEFAULT_CONFIG, ...userConfig };
-  }
-  return { ...DEFAULT_CONFIG };
 }
 
 function pickStory(args: string[]): void {
@@ -559,16 +554,31 @@ function pickStory(args: string[]): void {
     process.exit(1);
   }
 
-  const config = loadConfig();
+  const strict = args.includes('--strict');
+  const config = loadConfig(findRepoRoot(workspace));
   const modelTier = new ModelTier(config.models.default, config.models.escalation, config.escalation.threshold);
   const consensus = new ConsensusEngine(config.consensus.quorumSize, config.consensus.requiredMajority);
   const loop = new RalphLoop(workspace, modelTier, consensus);
 
   const story = loop.pickNextStory();
-  if (!story) {
+  if (story) {
+    console.log(story.id);
+    return;
+  }
+
+  if (!strict) {
+    // Legacy behavior, kept for existing callers: unconditionally report
+    // complete. Use --strict to distinguish a truly finished phase from one
+    // stuck with blocked/in-flight stories (see PHASE_STUCK below).
+    console.log('PHASE_COMPLETE');
+    return;
+  }
+
+  if (loop.isPhaseComplete()) {
     console.log('PHASE_COMPLETE');
   } else {
-    console.log(story.id);
+    console.log('PHASE_STUCK');
+    process.exit(2);
   }
 }
 
@@ -585,7 +595,7 @@ function storyUpdate(args: string[]): void {
     process.exit(1);
   }
 
-  const config = loadConfig();
+  const config = loadConfig(findRepoRoot(workspace));
   const modelTier = new ModelTier(config.models.default, config.models.escalation);
   const consensus = new ConsensusEngine(config.consensus.quorumSize, config.consensus.requiredMajority);
   const loop = new RalphLoop(workspace, modelTier, consensus);
@@ -601,7 +611,7 @@ function snapshot(args: string[]): void {
   const attemptFlag = args.indexOf('--attempt');
   const attempt = attemptFlag !== -1 ? parseInt(args[attemptFlag + 1]) : 1;
 
-  const config = loadConfig();
+  const config = loadConfig(findRepoRoot(workspace));
   const modelTier = new ModelTier(config.models.default, config.models.escalation);
   const consensus = new ConsensusEngine(config.consensus.quorumSize, config.consensus.requiredMajority);
   const loop = new RalphLoop(workspace, modelTier, consensus);
@@ -609,14 +619,84 @@ function snapshot(args: string[]): void {
   console.log(tag);
 }
 
+function verifyStory(args: string[]): void {
+  const wsFlag = args.indexOf('--workspace');
+  const workspace = wsFlag !== -1 ? args[wsFlag + 1] : process.cwd();
+  const storyFlag = args.indexOf('--story');
+  const storyId = storyFlag !== -1 ? args[storyFlag + 1] : null;
+  const modelFlag = args.indexOf('--model');
+  const modelOverride = modelFlag !== -1 ? args[modelFlag + 1] : undefined;
+
+  if (!storyId) {
+    console.error('Usage: sugar verify --story <id> [--workspace <path>] [--model <model>]');
+    process.exit(1);
+  }
+
+  const config = loadConfig(findRepoRoot(workspace));
+  const runner = createAgentRunner({
+    runnerBin: config.runnerBin,
+    permissionMode: config.permissionMode,
+    cwd: workspace,
+  });
+  const verifier = new Verifier(workspace, runner);
+
+  let result;
+  try {
+    result = verifier.runQuorum(storyId, modelOverride);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+
+  console.log(`${result.storyId}: ${result.passVotes} pass / ${result.failVotes} fail -> ${result.status}`);
+  for (const reason of result.reasons) console.log(`  - ${reason}`);
+  process.exit(result.passed ? 0 : 1);
+}
+
+// Exit codes: 0 = complete, 1 = max iterations reached without completing, 3 = stuck
+// (blocked or otherwise unfinished stories remain with no pending/rejected work to pick up).
+function runCmd(args: string[]): void {
+  const positional = args.filter(a => !a.startsWith('--'));
+  const workspace = positional[0] || process.cwd();
+  const maxFlag = args.indexOf('--max-iterations');
+  const maxIterationsArg = maxFlag !== -1 ? parseInt(args[maxFlag + 1], 10) : NaN;
+  const modelFlag = args.indexOf('--model');
+  const modelOverride = modelFlag !== -1 ? args[modelFlag + 1] : undefined;
+
+  const prdPath = path.join(workspace, 'prd.json');
+  if (!fs.existsSync(prdPath)) {
+    console.error(`No prd.json found in ${workspace}`);
+    process.exit(1);
+  }
+
+  const config = loadConfig(findRepoRoot(workspace));
+  const maxIterations = Number.isFinite(maxIterationsArg) ? maxIterationsArg : config.maxIterations;
+  const runner = createAgentRunner({
+    runnerBin: config.runnerBin,
+    permissionMode: config.permissionMode,
+    cwd: workspace,
+  });
+  const loopRunner = new LoopRunner(workspace, config, runner, modelOverride);
+  const result = loopRunner.run(maxIterations);
+
+  console.log(`\n${result.status.toUpperCase()} — ${result.passed}/${result.total} stories passed (${result.iterations} iteration(s))`);
+  if (result.blocked.length > 0) {
+    console.log(`Blocked: ${result.blocked.join(', ')}`);
+  }
+
+  if (result.status === 'complete') process.exit(0);
+  if (result.status === 'stuck') process.exit(3);
+  process.exit(1);
+}
+
 function workspaceCmd(args: string[]): void {
   const sub = args[0];
-  const config = loadConfig();
-  const repoRoot = process.cwd();
+  const repoRoot = findRepoRoot();
+  const config = loadConfig(repoRoot);
   const repoName = path.basename(repoRoot);
   const mgr = new WorkspaceManager({
     repoRoot,
-    basePath: path.join('/tmp', `${repoName}-phases`),
+    basePath: resolveWorkspaceBasePath(config, repoRoot),
     repoName,
   });
 
@@ -645,7 +725,7 @@ function workspaceCmd(args: string[]): void {
     case 'destroy': {
       const phase = args[1];
       if (!phase) { console.error('Usage: sugar workspace destroy <phase>'); process.exit(1); }
-      mgr.destroyWorkspace({ phase, branch: phase, path: path.join('/tmp', `${repoName}-phases`, phase), model: '' });
+      mgr.destroyWorkspace({ phase, branch: phase, path: path.join(resolveWorkspaceBasePath(config, repoRoot), phase), model: '' });
       console.log(`Destroyed workspace: ${phase}`);
       break;
     }
@@ -660,11 +740,68 @@ function workspaceCmd(args: string[]): void {
   }
 }
 
+function generateCmd(args: string[]): void {
+  const phasesFlag = args.indexOf('--phases');
+  const phasesFile = phasesFlag !== -1 ? args[phasesFlag + 1] : null;
+  const taskFlag = args.indexOf('--task');
+  const taskDescription = taskFlag !== -1 ? args[taskFlag + 1] : '';
+
+  if (!phasesFile) {
+    console.error('Usage: sugar generate --phases <phases.json> [--task "<description>"]');
+    process.exit(1);
+  }
+  if (!fs.existsSync(phasesFile)) {
+    console.error(`File not found: ${phasesFile}`);
+    process.exit(1);
+  }
+
+  let phases: PhaseDefinition[];
+  try {
+    phases = JSON.parse(fs.readFileSync(phasesFile, 'utf-8'));
+  } catch {
+    console.error(`Invalid JSON: ${phasesFile}`);
+    process.exit(1);
+  }
+  if (!Array.isArray(phases) || phases.length === 0) {
+    console.error(`${phasesFile} must contain a non-empty array of phase definitions`);
+    process.exit(1);
+  }
+
+  const repoRoot = findRepoRoot();
+  const config = loadConfig(repoRoot);
+  const orchestrator = new Orchestrator(repoRoot, config);
+
+  let workspaces;
+  try {
+    workspaces = orchestrator.resolveWorkspaces(phases);
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+
+  const graph = orchestrator.analyze(phases);
+  orchestrator.generateWorkspaceFiles(workspaces, phases, taskDescription, graph);
+
+  console.log(`Generated workspace files for ${workspaces.length} phase(s):`);
+  for (const ws of workspaces) {
+    console.log(`  ${ws.phase.padEnd(28)} -> ${ws.path}`);
+  }
+  console.log(`execution.md written to ${path.join(repoRoot, 'execution.md')}`);
+}
+
 function propagatePatterns(args: string[]): void {
   const baseFlag = args.indexOf('--base');
   const basePath = baseFlag !== -1 ? args[baseFlag + 1] : process.cwd();
-  const repoRoot = process.cwd();
+  const repoRoot = findRepoRoot();
   const mgr = new PatternManager(repoRoot);
+  const inject = args.includes('--inject');
+  const onlyFlag = args.indexOf('--only');
+  const only = onlyFlag !== -1 ? args[onlyFlag + 1].split(',').map(s => s.trim()).filter(Boolean) : null;
+
+  if (!fs.existsSync(basePath)) {
+    console.error(`Directory not found: ${basePath}`);
+    process.exit(1);
+  }
 
   const entries = fs.readdirSync(basePath, { withFileTypes: true });
   for (const entry of entries) {
@@ -680,6 +817,21 @@ function propagatePatterns(args: string[]): void {
 
   const patterns = mgr.readPatterns();
   console.log(`Total patterns: ${patterns.patterns.length}`);
+
+  if (!inject) return;
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    if (only && !only.includes(entry.name)) continue;
+    const claudePath = path.join(basePath, entry.name, 'CLAUDE.md');
+    if (!fs.existsSync(claudePath)) continue;
+    const content = fs.readFileSync(claudePath, 'utf-8');
+    const updated = mgr.injectPatterns(content, patterns.patterns);
+    if (updated !== content) {
+      fs.writeFileSync(claudePath, updated);
+      console.log(`  ${entry.name}: patterns injected into CLAUDE.md`);
+    }
+  }
 }
 
 // ============================================================
@@ -698,17 +850,25 @@ function printUsage(): void {
   console.log('');
   console.log('  sugar config init                                Create sugar.config.json');
   console.log('  sugar workspace <list|create|destroy|cleanup>    Manage workspaces');
-  console.log('  sugar pick-story [--workspace <path>]            Get next story ID');
+  console.log('  sugar generate --phases <file> [--task <desc>]   Generate prd.json/CLAUDE.md/VERIFY.md/ralph-loop.sh + execution.md');
+  console.log('  sugar run <workspace> [--max-iterations n] [--model m]');
+  console.log('                                                    Run the Ralph loop for a workspace until complete/stuck/max iterations');
+  console.log('  sugar pick-story [--workspace <path>] [--strict] Get next story ID (or PHASE_COMPLETE/PHASE_STUCK with --strict)');
   console.log('  sugar story-update --story <id> --status <s>     Update story status');
   console.log('  sugar snapshot --story <id> --attempt <n>        Create git snapshot tag');
-  console.log('  sugar propagate-patterns [--base <path>]         Extract and merge patterns');
+  console.log('  sugar verify --story <id> [--workspace <path>]   Run verifier quorum, tally consensus');
+  console.log('  sugar propagate-patterns [--base <path>] [--inject] [--only <phases>]');
+  console.log('                                                    Extract and merge patterns, optionally injecting into CLAUDE.md');
   console.log('');
   console.log('Examples:');
   console.log('  sugar validate /tmp/myapp-phases/phase-a/prd.json');
   console.log('  sugar status-all /tmp/myapp-phases');
   console.log('  sugar workspace create phase-a-types');
+  console.log('  sugar generate --phases phases.json --task "Refactor the payments module"');
+  console.log('  sugar run /tmp/myapp-phases/phase-a --max-iterations 20');
   console.log('  sugar pick-story --workspace /tmp/myapp-phases/phase-a');
   console.log('  sugar story-update --story US-001 --status passed --workspace /tmp/myapp-phases/phase-a');
+  console.log('  sugar verify --story US-001 --workspace /tmp/myapp-phases/phase-a');
 }
 
 function readPrd(filePath: string): PrdJson {
@@ -780,6 +940,10 @@ function main(): void {
       workspaceCmd(args.slice(1));
       break;
     }
+    case 'generate': {
+      generateCmd(args.slice(1));
+      break;
+    }
     case 'pick-story': {
       pickStory(args.slice(1));
       break;
@@ -790,6 +954,14 @@ function main(): void {
     }
     case 'snapshot': {
       snapshot(args.slice(1));
+      break;
+    }
+    case 'verify': {
+      verifyStory(args.slice(1));
+      break;
+    }
+    case 'run': {
+      runCmd(args.slice(1));
       break;
     }
     case 'propagate-patterns': {

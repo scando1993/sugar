@@ -1,35 +1,20 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { execSync } from 'child_process';
 import {
   SugarConfig,
   DEFAULT_CONFIG,
   PrdJson,
   PhaseWorkspace,
+  PhaseDefinition,
   DependencyGraph,
-  Pattern,
 } from '../types';
 import { WorkspaceManager } from './workspace';
 import { DependencyAnalyzer } from './dependency';
 import { PatternManager } from './patterns';
+import { deepMerge, loadConfig, resolveSugarBin, resolveWorkspaceBasePath } from './config';
 import { generateClaudeMd } from './templates/claude-md';
 import { generateVerifyMd } from './templates/verify-md';
 import { generateRalphLoop } from './templates/ralph-loop-sh';
-
-export interface PhaseDefinition {
-  id: string;
-  name: string;
-  scope: string;
-  model?: string;
-  produces: string[];
-  consumes: string[];
-  dependencies: string[];
-  stories: Array<{
-    title: string;
-    description: string;
-    acceptanceCriteria: string[];
-  }>;
-}
 
 export class Orchestrator {
   private config: SugarConfig;
@@ -38,12 +23,12 @@ export class Orchestrator {
   private patternManager: PatternManager;
 
   constructor(repoRoot: string, config?: Partial<SugarConfig>) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = deepMerge(DEFAULT_CONFIG, config);
     this.repoRoot = repoRoot;
     const repoName = path.basename(repoRoot);
     this.workspaceManager = new WorkspaceManager({
       repoRoot,
-      basePath: path.join('/tmp', `${repoName}-phases`),
+      basePath: resolveWorkspaceBasePath(this.config, repoRoot),
       repoName,
     });
     this.patternManager = new PatternManager(repoRoot);
@@ -60,6 +45,36 @@ export class Orchestrator {
       this.workspaceManager.initProgress(ws);
       workspaces.push(ws);
     }
+    return workspaces;
+  }
+
+  /**
+   * Phase 3b prerequisite: look up the workspaces Phase 2 already created for
+   * each phase (via `sugar workspace create <id>`), applying each phase's
+   * configured model. Throws listing any phase whose workspace is missing,
+   * rather than silently creating one — workspace creation is Phase 2's job.
+   */
+  resolveWorkspaces(phases: PhaseDefinition[]): PhaseWorkspace[] {
+    const existing = this.workspaceManager.listWorkspaces();
+    const workspaces: PhaseWorkspace[] = [];
+    const missing: string[] = [];
+
+    for (const phase of phases) {
+      const ws = existing.find(w => w.phase === phase.id);
+      if (!ws) {
+        missing.push(phase.id);
+        continue;
+      }
+      ws.model = phase.model || this.config.models.default;
+      workspaces.push(ws);
+    }
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Missing workspace(s) for phase(s): ${missing.join(', ')}. Run "sugar workspace create <phase>" first.`,
+      );
+    }
+
     return workspaces;
   }
 
@@ -129,7 +144,7 @@ export class Orchestrator {
           implementModel: ws.model,
           verifyModel: this.config.models.verify || this.config.models.default,
           escalationModel: this.config.models.escalation,
-          maxTerms: 3,
+          maxTerms: this.config.consensus.maxTerms,
         },
         userStories: phase.stories.map((s, i) => ({
           id: `US-${String(i + 1).padStart(3, '0')}`,
@@ -170,9 +185,7 @@ export class Orchestrator {
         phaseName: phase.name,
         maxIterations: this.config.maxIterations,
         defaultModel: ws.model,
-        escalationModel: this.config.models.escalation,
-        escalationThreshold: this.config.escalation.threshold,
-        sugarBin: 'npx sugar',
+        sugarBin: resolveSugarBin(this.config.sugarBin),
       });
       this.workspaceManager.writeFile(ws, 'ralph-loop.sh', ralphLoop);
     }
@@ -278,12 +291,7 @@ export class Orchestrator {
   }
 
   loadConfig(): SugarConfig {
-    const configPath = path.join(this.repoRoot, 'sugar.config.json');
-    if (fs.existsSync(configPath)) {
-      const userConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      return { ...DEFAULT_CONFIG, ...userConfig };
-    }
-    return { ...DEFAULT_CONFIG };
+    return loadConfig(this.repoRoot);
   }
 
   private buildExecutionMd(

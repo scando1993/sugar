@@ -1,131 +1,238 @@
-# Refactor Plan: Extract Core Engine into TypeScript Library
+# Remediation Plan: Close the Gaps Between the Sugar Skill, CLI, and Generated Runtime
 
-## Objective
+> **Audience:** any agent (or human) picking up this work without prior conversation context.
+> This document is the single source of truth for the remediation effort. Read it fully before
+> implementing. The previous plan.md (TypeScript engine extraction) is complete — see commit
+> `d4998f7` and git history if you need it.
 
-Extract the ralph loop, consensus algorithm, dependency analysis, pattern propagation, workspace management, and model tiering from skill markdown files into a TypeScript library (`src/`). Skills across all 8 platforms become thin wrappers that invoke the library via CLI commands. The library is also usable standalone for custom implementations.
+---
 
-## Problem
+## 1. Context — what this repository is
 
-All orchestration logic currently lives as procedural markdown in `SKILL.md` files (656 lines in orchestrate alone). This means:
+**Sugar** is a phased software-engineering execution system. A skill document
+(`.claude/skills/orchestrate/SKILL.md`, registered as `/sugar`) drives a top-level agent through
+four phases: planning → workspace setup → PRD-driven parallel implementation → merge. Each
+implementation phase runs in an isolated git worktree containing a self-contained "Ralph"
+environment:
 
-1. **Every platform duplicates logic** — 8 copies of the same ralph loop, consensus algorithm, etc. across `.claude/`, `.github/`, `.cursor/`, `.windsurf/`, `.cline/`, `.agents/`, `.opencode/`, `.gemini/`
-2. **Updates require syncing 8 platforms** — change consensus quorum size = edit 8+ files
-3. **No testability** — logic in markdown can't be unit tested
-4. **No reuse** — external projects can't import the ralph loop or consensus algorithm as a library
-5. **Embedded bash scripts** — `ralph-loop.sh` is generated inline from SKILL.md template strings
+- `prd.json` — user-story state machine (`pending → implementing → verifying → passed/rejected/blocked`)
+- `CLAUDE.md` — instructions for a fresh implementer agent spawned per story
+- `VERIFY.md` — instructions for verifier agents that vote `VOTE:PASS` / `VOTE:FAIL`
+- `ralph-loop.sh` — bash loop that spawns one `claude` CLI instance per iteration
+- `progress.txt` — cross-iteration memory / learnings
 
-## Solution
+Supporting engine (TypeScript, `src/`):
 
-Single TypeScript codebase as source of truth. Skills become thin instruction layers that tell the agent: "run `npx sugar <command>`". The library exposes both CLI and programmatic API.
+| Path | Role |
+|---|---|
+| `src/index.ts` | CLI entry (`sugar validate/status/status-all/dashboard/brainstorm/config/workspace/pick-story/story-update/snapshot/propagate-patterns`) |
+| `src/lib/orchestrator.ts` | `Orchestrator` — workspace setup, workspace-file generation, merge order, pattern propagation |
+| `src/lib/ralph-loop.ts` | `RalphLoop` — story picking, snapshots, progress/failure recording |
+| `src/lib/consensus.ts` | `ConsensusEngine` — vote tally, consensus rounds, term increments |
+| `src/lib/model-tier.ts` | `ModelTier` — escalation/de-escalation state machine |
+| `src/lib/dependency.ts` | `DependencyAnalyzer` — parallel groups, critical path, cycle detection |
+| `src/lib/workspace.ts` | `WorkspaceManager` — git worktree lifecycle |
+| `src/lib/patterns.ts` | `PatternManager` — extract patterns from progress.txt, inject into CLAUDE.md |
+| `src/lib/templates/*.ts` | Generators for `CLAUDE.md`, `VERIFY.md`, `ralph-loop.sh` |
+| `scripts/install.sh` | Bootstrap (`npm install && npm run build && npm link`) — **currently an empty file** |
 
-## Architecture
+The skill is duplicated for 6+ platforms (`.claude/`, `.agents/`, `.opencode/`, `.gemini/`,
+`.github/agents/` + `.github/prompts/`, `.cursor/`). `.claude/skills/orchestrate/SKILL.md` is the
+canonical copy; all others have already drifted.
+
+## 2. Current state — where execution actually breaks
+
+An architectural review (2026-07-14) found the system has **three engines that disagree**: the TS
+library, the generated bash loop, and the skill prose. The load-bearing path between them is
+broken. Verified findings, ordered by severity:
+
+### F1 — `sugar verify` does not exist (FATAL)
+`ralph-loop.sh` gates every story on `if $SUGAR verify ...`
+(`src/lib/templates/ralph-loop-sh.ts:47`), but `src/index.ts` has no `verify` command — unknown
+commands exit 1. Consequence: **every story is rejected and `git checkout -- .` wipes the
+implementation.** Nothing anywhere spawns verifier agents or parses votes; the entire consensus
+subsystem (`ConsensusEngine`, `VERIFY.md`, `verifyModel`, quorum config) has no execution path.
+
+### F2 — Phase 3b (workspace-file generation) is unreachable from the CLI (FATAL)
+The skill says the library generates `prd.json`/`CLAUDE.md`/`VERIFY.md`/`ralph-loop.sh`/
+`execution.md`, but no CLI command calls `Orchestrator.generateWorkspaceFiles()`. `Orchestrator`
+is imported in `src/index.ts:6` and never used. Likewise `sugar propagate-patterns` only extracts
+to `patterns.json`; the injection into the next group's CLAUDE.md
+(`Orchestrator.propagatePatterns`, `src/lib/orchestrator.ts:256-278`) is never invoked.
+
+### F3 — `scripts/install.sh` is empty (FATAL for onboarding)
+SKILL.md's prerequisite section instructs agents to run it.
+
+### F4 — Story state machine holes cause false success (HIGH)
+- Nothing ever sets `status: "blocked"`; `maxTerms` is validated but never enforced → endless
+  reject loops until `maxIterations`.
+- `sugar pick-story` prints `PHASE_COMPLETE` when no `pending|rejected` stories remain
+  (`src/index.ts:567-572`), so a story stranded in `implementing`/`verifying`/`blocked` makes the
+  loop **exit 0 as success**, contradicting `RalphLoop.isPhaseComplete()` (all `passed`).
+
+### F5 — Logic triplication (HIGH, root cause of F1/F2)
+Model escalation exists in TS (`ModelTier`) and again in bash (`ralph-loop-sh.ts:71-78`); the TS
+state is in-memory only and discarded every CLI invocation, so the class is dead weight. Story
+picking exists in TS (`RalphLoop.pickNextStory`) and again as prose in generated CLAUDE.md — the
+loop snapshots the story the CLI picked while the agent independently re-picks its own.
+
+### F6 — Snapshot tags collide across parallel phases (HIGH)
+Git tags are repo-global across worktrees and every workspace numbers stories from `US-001`, so
+parallel phases both create `attempt-US-001-v1`; the collision is silently swallowed
+(`src/lib/ralph-loop.ts:33-41`) and the rollback tag points at another phase's commit. Also
+`--attempt "$i"` passes the loop iteration, not the per-story attempt.
+
+### F7 — Fragile agent↔loop contract (HIGH)
+The loop detects results by grepping free-text agent output
+(`grep -qiE "STORY_FAILED|stuck|blocked|retry.?exhausted"`). Merely *mentioning* "blocked" trips
+failure; consensus-fail + text-match double-increments failures; a malformed
+`STORY_IMPLEMENTED` line yields an empty `STORY_ID` passed to downstream commands.
+
+### F8 — Config system half-wired (MEDIUM)
+- Shallow merge `{ ...DEFAULT_CONFIG, ...userConfig }` (duplicated in `src/index.ts:543-550` and
+  `src/lib/orchestrator.ts:280-287`) — setting only `models.default` deletes
+  `models.escalation`/`models.verify`.
+- `sugar.config.json` is resolved from `process.cwd()`, so behavior depends on where the loop was
+  launched.
+- Workspace base path `/tmp/<repo>-phases` is hardcoded (`src/index.ts:619`,
+  `orchestrator.ts:46`), not configurable, lost to /tmp cleanup, and collides across same-named
+  repos. `repoRoot` uses `process.cwd()` instead of `git rev-parse --show-toplevel`.
+- `maxTerms: 3` hardcoded in `orchestrator.ts:132`; `sugarBin: 'npx sugar'` hardcoded at
+  `orchestrator.ts:175` although the package is `private: true` (unpublished — `npx sugar` can
+  fetch the unrelated Sugar.js from the registry).
+
+### F9 — Skill/harness mismatches (MEDIUM)
+- SKILL.md Phase 3c uses foreground `ralph-loop.sh ... & wait` — exceeds Claude Code's Bash tool
+  timeout (10 min max); contradicts the frontmatter claim of "parallel subagents".
+- `--dangerously-skip-permissions` is baked into the generated loop with no user-facing choice.
+- Six skill copies drift with no generation step; the 2026-07 prerequisite section exists only in
+  the `.claude` copy.
+- TS-only assumptions: `validatePrd` *requires* a "Typecheck passes" criterion via regex
+  (`src/index.ts:91-94`); default quality checks are npm scripts. Non-JS repos cannot validate.
+- README claims 8-platform parity but `ralph-loop.sh` hardcodes the `claude` binary.
+
+### F10 — Smaller cleanups (LOW)
+`tallyVotes` ignores `quorumSize`; `validatePrd` demands pre-sorted priorities (redundant);
+hand-rolled argv parsing with silent cwd fallbacks; two inline HTML apps bloat `src/index.ts` to
+806 lines; `workspace cleanup` force-deletes branches (`git branch -D`) without a merged check;
+tests cover TS units but zero CLI/bash integration (which is why F1 survived).
+
+## 3. Target architecture
+
+**One engine.** The TypeScript CLI owns the loop; bash shrinks to a thin launcher (or is removed).
+The skill prose only narrates and calls CLI commands that actually exist.
 
 ```
-src/
-  index.ts              <-- CLI entry point (existing + new commands)
-  types.ts              <-- Shared types (existing + expanded)
-  lib/
-    ralph-loop.ts       <-- Ralph iteration engine
-    consensus.ts        <-- Verifier quorum + vote tally
-    workspace.ts        <-- Worktree creation, template generation
-    dependency.ts       <-- Dependency graph, parallel groups, critical path
-    patterns.ts         <-- Pattern extraction + propagation
-    orchestrator.ts     <-- Phase state machine, group execution
-    model-tier.ts       <-- Model escalation / de-escalation logic
-    templates/
-      claude-md.ts      <-- CLAUDE.md template generator
-      verify-md.ts      <-- VERIFY.md template generator
-      ralph-loop-sh.ts  <-- ralph-loop.sh script generator
+skill (SKILL.md, one canonical copy)
+   │  calls documented CLI commands only
+   ▼
+sugar CLI (src/index.ts — thin command router)
+   ├─ sugar generate  ──► Orchestrator.generateWorkspaceFiles()   (fixes F2)
+   ├─ sugar run <ws>  ──► LoopRunner: iterate → spawn implementer
+   │                       → sugar-internal verify (spawn N verifiers,
+   │                         parse votes, ConsensusEngine tally)     (fixes F1, F5, F7)
+   │                       → ModelTier persisted to <ws>/.sugar-state.json
+   ├─ sugar verify    ──► standalone verifier quorum (also used by run)
+   └─ existing commands, all reading config via findRepoRoot()      (fixes F8)
 ```
 
-## Scope
+Key decisions:
+1. **`sugar run <workspace>` replaces the bash loop's brain.** Iteration, story claim
+   (`pending → implementing` written atomically before implementation), snapshots, escalation,
+   consensus, commit, and completion detection all happen in tested TS. `ralph-loop.sh` becomes
+   `exec sugar run "$SCRIPT_DIR" --max-iterations N --model M` (kept for backward compat).
+2. **Structured agent contract.** The implementer agent writes `<ws>/.sugar-result.json`
+   (`{storyId, outcome: implemented|failed|phase_complete, notes}`) as its final act; stdout
+   markers remain as fallback. The runner treats the file as authoritative.
+3. **Tag namespacing.** Snapshot tags become `sugar/<phase>/<storyId>/attempt-<n>` with a real
+   per-story attempt counter persisted in `.sugar-state.json`.
+4. **State machine closed.** `term >= maxTerms` → `blocked`. `sugar run` exits non-zero with a
+   `PHASE_BLOCKED` report when unfinished non-pending stories remain; `pick-story` gains
+   `--strict` distinguishing `PHASE_COMPLETE` from `PHASE_STUCK`.
+5. **Config unification.** One `loadConfig()` in `src/lib/config.ts` with deep merge, repo root
+   via `git rev-parse --show-toplevel`, `workspaceBasePath` + `maxTerms` + `permissionMode` +
+   `runner` (claude binary) as config fields. `sugarBin` resolved from the actual installed
+   binary path.
+6. **Docs single-sourced.** `.claude/skills/*/SKILL.md` is canonical; `scripts/sync-skills.ts`
+   generates all other platform variants; CI (or a test) fails on drift.
+7. **Language-agnostic gates.** The mandatory-criterion check derives from
+   `config.qualityChecks[0]` instead of a hardcoded "Typecheck passes" regex.
 
-### In scope
+## 4. Workstreams, dependencies, execution phases
 
-- Extract ralph loop logic from SKILL.md → `src/lib/ralph-loop.ts`
-- Extract consensus algorithm → `src/lib/consensus.ts`
-- Extract dependency analysis → `src/lib/dependency.ts`
-- Extract pattern propagation → `src/lib/patterns.ts`
-- Extract workspace setup → `src/lib/workspace.ts`
-- Extract model tiering → `src/lib/model-tier.ts`
-- Create orchestrator (phase state machine) → `src/lib/orchestrator.ts`
-- Template generators for CLAUDE.md, VERIFY.md, ralph-loop.sh
-- New CLI commands: `sugar run`, `sugar workspace`, `sugar analyze`, `sugar merge`
-- Thin down all 8 platform skill files to invoke CLI
-- Expose programmatic API via `src/lib/index.ts` for library consumers
-- Unit tests for each module
+Sized for the sugar workflow itself (one workspace per workstream is viable).
 
-### Out of scope
+### WS-A — Foundation: config + repo-root resolution *(no dependencies)*
+Produces: `src/lib/config.ts` (deep merge, findRepoRoot, new fields), both former `loadConfig`
+call sites migrated, `install.sh` written (npm install/build/link + `command -v` self-check).
+Fixes: F3, F8.
 
-- Changing the workflow itself (phases, iron laws, story format)
-- Changing prd.json schema
-- New features beyond what SKILL.md already describes
-- Platform-specific agent behavior (that stays in skill files)
+### WS-B — Consensus execution path: `sugar verify` *(depends on WS-A)*
+Produces: verifier spawner (N parallel `claude --model <verifyModel> < VERIFY.md`), vote parser,
+`ConsensusEngine` wiring, `maxTerms → blocked` enforcement, `rejection_log` feedback loop.
+Fixes: F1, part of F4.
 
-## Dependency Map
+### WS-C — Loop ownership: `sugar run` + state persistence *(depends on WS-A, WS-B)*
+Produces: `LoopRunner` class + command; persisted `ModelTierState`; structured result-file
+contract (template updates in `claude-md.ts`); namespaced snapshot tags with real attempt
+counters; `PHASE_STUCK` semantics; `ralph-loop.sh` template reduced to a thin `exec`.
+Fixes: F4, F5, F6, F7.
 
-```
-Phase A: Core types + interfaces
-  └── produces: expanded types.ts, config schema, event types
-  └── depends on: nothing
+### WS-D — Generation command: `sugar generate` *(depends on WS-A; parallel with WS-B/C)*
+Produces: `sugar generate --phases <phases.json>` invoking `Orchestrator.generateWorkspaceFiles`
+(+ `execution.md`), documented `phases.json` schema in types, `propagate-patterns --inject` flag
+wiring `injectPatterns`. Fixes: F2.
 
-Phase B: Library modules
-  └── produces: ralph-loop.ts, consensus.ts, dependency.ts, patterns.ts, workspace.ts, model-tier.ts
-  └── depends on: Phase A (types)
+### WS-E — Skill + docs realignment *(depends on WS-B, WS-C, WS-D)*
+Produces: SKILL.md rewritten against the real CLI surface (background execution via
+`run_in_background` + `sugar status-all` polling — no foreground `wait`), permission mode as an
+explicit user choice, `scripts/sync-skills.ts` + drift test, README platform-parity claims
+corrected. Fixes: F9.
 
-Phase C: Template generators
-  └── produces: claude-md.ts, verify-md.ts, ralph-loop-sh.ts
-  └── depends on: Phase A (types), Phase B (workspace for context)
+### WS-F — Hygiene *(depends on WS-C; can trail)*
+Produces: quorum-aware `tallyVotes`, argv parsing hardening, HTML apps extracted from
+`index.ts`, `workspace cleanup` merged-check guard, an end-to-end smoke test (generate → one
+mocked `sugar run` iteration with a stub `claude`) plus shellcheck on the generated script.
+Fixes: F10, guards against F1-class regressions.
 
-Phase D: Orchestrator + CLI
-  └── produces: orchestrator.ts, expanded CLI commands
-  └── depends on: Phase B (all modules), Phase C (templates)
+**Parallel groups:** Group 1: `WS-A` → Group 2: `WS-B`, `WS-D` (parallel) → Group 3: `WS-C` →
+Group 4: `WS-E`, `WS-F` (parallel).
+**Critical path:** A → B → C → E.
 
-Phase E: Thin skills refactor
-  └── produces: simplified SKILL.md files across 8 platforms
-  └── depends on: Phase D (CLI must be working first)
+## 5. Acceptance criteria (per workstream)
 
-Phase F: Tests
-  └── produces: unit tests for all lib modules
-  └── depends on: Phase B, Phase C, Phase D
-```
+- **A:** partial `sugar.config.json` overrides merge deeply (unit test); `sugar` commands behave
+  identically from repo root and subdirectories; `./scripts/install.sh` from a clean clone yields
+  a working `sugar` on PATH.
+- **B:** `sugar verify --workspace <ws> --story US-001` spawns quorum, records votes in
+  `prd.json`, returns exit 0/1 by majority; a story rejected `maxTerms` times becomes `blocked`.
+- **C:** `sugar run` completes a 2-story fixture with a stubbed `claude` binary; kills/timeouts
+  leave the story re-claimable (no permanent `implementing`); tags namespaced per phase; exit
+  code distinguishes complete vs stuck.
+- **D:** `sugar generate --phases fixtures/phases.json` emits all five files per workspace and
+  `execution.md`; `sugar validate` passes on the generated `prd.json`.
+- **E:** drift test proves all platform copies are regenerated from the canonical skill; SKILL.md
+  references only commands that exist (`grep`-able check).
+- **F:** e2e smoke test green in CI; shellcheck clean on generated script.
 
-## Parallel Groups
+## 6. Open decisions (need owner input before the affected workstream starts)
 
-```
-Group 1: [Phase A]                    — no deps
-Group 2: [Phase B, Phase F-setup]     — after A
-Group 3: [Phase C]                    — after A, B
-Group 4: [Phase D]                    — after B, C
-Group 5: [Phase E, Phase F-run]       — after D
-```
+1. **Keep or drop the bash `ralph-loop.sh` entirely?** Plan assumes keep-as-thin-wrapper for
+   backward compat. Dropping simplifies WS-C but breaks documented invocations. *(Blocks WS-C.)*
+2. **Verifier isolation:** verifiers currently read `git diff HEAD~1 HEAD` in the same worktree —
+   run them in the workspace (cheap, chosen default) or in ephemeral read-only worktrees (safer)?
+   *(Blocks WS-B.)*
+3. **Default permission mode** for spawned agents: keep `--dangerously-skip-permissions` as an
+   opt-in config value (`permissionMode: "skip" | "acceptEdits" | "default"`), default to which?
+   Plan proposes defaulting to `acceptEdits`. *(Blocks WS-C templates.)*
+4. **`phase` / `orchestrate` / `sugar` naming:** consolidate on `sugar` and delete stale aliases?
+   *(Affects WS-E only.)*
 
-## Critical Path
+## 7. Working conventions for agents on this effort
 
-A → B → C → D → E
-
-## Risks
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| SKILL.md has implicit agent-only logic (prompt repetition, red flags table) that can't be code | Skills too thin, lose agent guidance | Skills keep behavioral/prompt sections, only delegate execution commands |
-| ralph-loop.sh calls `claude` CLI directly — library can't replace that | Loop still needs bash shim | Library generates the script; script calls library for state management |
-| Breaking existing users who installed skills manually | Skills stop working after update | Backward compat: skills work standalone AND with library. Library enhances, doesn't replace |
-| Consensus verification needs actual LLM calls | Can't unit test easily | Mock LLM interface, test vote tallying + state transitions in isolation |
-
-## Key Design Decisions
-
-1. **Skills = behavioral instructions + CLI delegation** — Skills still tell agents HOW to think (iron laws, red flags, prompt repetition). They delegate WHAT to execute to `npx sugar <command>`.
-
-2. **ralph-loop.sh generated, not replaced** — The bash loop spawns fresh agent instances. Library generates it with correct config. Library also handles state (prd.json updates, vote tallying) that the bash script currently does inline with Python one-liners.
-
-3. **Library-first, CLI second** — All logic lives in importable TypeScript modules. CLI is a thin wrapper. External projects can `import { RalphLoop, ConsensusEngine } from 'sugar'`.
-
-4. **Config-driven** — `sugar.config.json` at repo root defines models, quorum size, escalation thresholds, quality check commands. Skills and ralph-loop.sh read from this instead of hardcoded values.
-
-## Constraints
-
-- Must remain compatible with all 8 platforms
-- Must not change the user-facing workflow (4 phases, approval gates)
-- Must not change prd.json schema (backward compat with existing PRD files)
-- Node.js >= 18 (already in package.json)
+- One workstream per branch/workspace; branch naming `ws-a-config`, `ws-b-verify`, etc.
+- Every commit passes `npm run build && npm test`.
+- Do not edit generated platform copies by hand once WS-E lands — edit the canonical skill and
+  regenerate.
+- Update the checkbox list in `todo.md` (if present) and this file's §6 when a decision is made;
+  record deviations from this plan at the bottom of this file under "## Deviations".

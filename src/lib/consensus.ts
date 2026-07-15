@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { PrdJson, Vote, UserStory, VoteCastEvent, StoryPassedEvent } from '../types';
+import { PrdJson, Vote, VoteCastEvent, StoryPassedEvent, StoryStatus } from '../types';
 
 export class ConsensusEngine {
   private quorumSize: number;
@@ -40,7 +40,7 @@ export class ConsensusEngine {
     };
   }
 
-  updateStoryStatus(prdPath: string, storyId: string, status: 'passed' | 'rejected'): void {
+  updateStoryStatus(prdPath: string, storyId: string, status: StoryStatus): void {
     const prd = this.readPrd(prdPath);
     const story = prd.userStories.find(s => s.id === storyId);
     if (!story) throw new Error(`Story ${storyId} not found in ${prdPath}`);

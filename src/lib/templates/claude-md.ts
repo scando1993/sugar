@@ -19,45 +19,50 @@ export function generateClaudeMd(ctx: ClaudeMdContext): string {
 # Ralph Agent — ${ctx.phaseName}
 
 You are an autonomous coding agent. You handle ONE user story per invocation.
+\`sugar run\` (the loop driving this workspace) has already picked the story
+for you and marked it \`"implementing"\` in prd.json before starting you —
+you do not pick a story yourself, and you are never invoked when no story is
+left to do.
 
 ## Your Task
 
-1. Read \`prd.json\` in this directory
+1. Read \`prd.json\` in this directory — find the ONE story with \`status: "implementing"\`. That is your assignment for this iteration.
 2. Read \`progress.txt\` — check the Codebase Patterns section first
-2b. Check \`failure_log.json\` (if it exists) — if the story you are about to implement has prior failure entries, read them and plan a DIFFERENT approach than what was tried before
+2b. Check \`failure_log.json\` (if it exists) — if this story has prior failure entries, read them and plan a DIFFERENT approach than what was tried before
 3. Verify you are on branch \`${ctx.branchName}\`. If not: \`git checkout ${ctx.branchName}\`
-4. Pick the **highest priority** user story where \`status\` is \`"pending"\` or \`"rejected"\`
-   - If picking a \`"rejected"\` story: read \`rejection_log.txt\` first to understand what failed
-   - After picking, set the story's \`status\` to \`"implementing"\` in prd.json
-5. If no stories remain unfinished (no \`"pending"\` or \`"rejected"\`) → reply with: PHASE_COMPLETE
-6. Implement that single user story
-7. **Quality Protocol (per story):**
+4. Implement that single user story
+5. **Quality Protocol (per story):**
    1. Implement the story
    2. Self-review: Does implementation match ALL acceptance criteria? Check EACH one.
    3. Run quality checks: \`${qualityLine}\`
    4. If checks pass: verify against prd.json criteria ONE MORE TIME
-   5. Only THEN commit
+   5. Only THEN proceed to step 6
    6. If anything fails at steps 2-4: fix, do NOT skip
-8. Output: \`STORY_IMPLEMENTED:[Story ID]\` — the loop handles the verifier quorum and commit
-9. If checks fail → fix and retry (up to 3 attempts). If stuck:
+6. Write \`.sugar-result.json\` in this directory as your FINAL action — this is what the loop reads to decide what happens next. Do NOT commit the code yourself; the loop commits only after the verifier quorum passes.
+   - Implemented and ready for verification (storyId is the ID from step 1, e.g. "US-003"):
+     \`{"storyId": "US-003", "outcome": "implemented"}\`
+   - Genuinely stuck after real attempts (see step 7):
+     \`{"outcome": "failed", "notes": "what you tried and why it didn't work"}\`
+7. If checks fail, fix and retry (up to 3 attempts) before writing a \`"failed"\` result. When stuck:
    - Set the story's \`notes\` field in prd.json to describe the blocker
-   - Append failure to progress.txt
-   - \`git checkout -- .\` to reset unstaged changes
+   - Append the failure to progress.txt
+   - Leave the working tree as-is — the loop resets it (\`git checkout -- .\`) after reading your result
 
-## Model Escalation
-If you cannot complete a story after 3 attempts, output: STORY_FAILED
-This signals the loop to escalate to a more capable model on the next iteration.
-Do NOT output STORY_FAILED if you haven't genuinely attempted 3 times.
+## Fallback output (only if you cannot write files for some reason)
 
-10. The loop updates \`status\` to \`"passed"\` or \`"rejected"\` after the quorum vote
-11. Append progress to \`progress.txt\` (format below)
-12. When ALL stories have \`status: "passed"\` → push: \`git push origin ${ctx.branchName}\`
+If you cannot write \`.sugar-result.json\`, print one of these exactly as your last line instead —
+the loop falls back to reading it, but the result file is authoritative when both are present:
+- \`STORY_IMPLEMENTED:[Story ID]\`
+- \`STORY_FAILED\`
 
-## Stop Condition
+## What happens after you stop
 
-After completing a story, check if ALL stories have \`status: "passed"\`.
-If yes, push and reply with exactly: PHASE_COMPLETE
-If no, end your response normally — the loop script will spawn a fresh iteration.
+The loop reads your result, runs the verifier quorum against \`VERIFY.md\`, and:
+- On consensus PASS: commits your changes and marks the story \`"passed"\`
+- On consensus FAIL: resets your changes and marks the story \`"rejected"\` (or \`"blocked"\` if this story has failed too many times)
+
+You do not need to push, check other stories' status, or decide whether the phase is complete —
+the loop derives that from prd.json between iterations.
 
 ## Progress Report Format
 
@@ -103,8 +108,8 @@ section at the TOP of progress.txt. Only general, reusable patterns.
 - Dependencies satisfied: ${depsLine}
 
 ## Task (repeated)
-Read prd.json. Pick highest priority story where status is "pending" or "rejected". Implement ONE story.
-Quality checks. Output STORY_IMPLEMENTED. Append progress. Stop. The loop handles iteration.
+Read prd.json. Find the story with status "implementing" — that's yours. Implement it.
+Run quality checks. Write .sugar-result.json. Stop. The loop handles verification and iteration.
 
 ## Known Patterns
 

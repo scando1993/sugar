@@ -12,6 +12,28 @@ $ARGUMENTS
 
 ---
 
+## Prerequisite: `sugar` CLI must be installed
+
+This skill shells out to the `sugar` binary for workspace creation, story state, consensus, and pattern propagation. Before Phase 2, verify it is on PATH:
+
+```bash
+command -v sugar >/dev/null || {
+  echo "sugar CLI not found. Install it from the plugin root:"
+  echo "  ./scripts/install.sh"
+  exit 1
+}
+```
+
+If missing, run the bootstrap from the plugin repo root:
+
+```bash
+./scripts/install.sh    # runs npm install && npm run build && npm link
+```
+
+That puts `sugar` on `$PATH` via `npm link`. The Ralph workspace files (`ralph-loop.sh`, `CLAUDE.md`, `VERIFY.md`) are generated per-workspace by `sugar workspace create` from inlined templates in the CLI — no separate template files to copy.
+
+---
+
 ## Reference
 
 Subagent execution follows the **[Ralph](https://github.com/snarktank/ralph)** pattern. Each phase workspace is a self-contained Ralph environment: `CLAUDE.md` (agent instructions), `prd.json` (story state machine), `progress.txt` (learning persistence). Subagents are autonomous — they read their workspace instructions and execute independently.

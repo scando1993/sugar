@@ -88,38 +88,35 @@ describe('Template Generators', () => {
   });
 
   describe('generateRalphLoop', () => {
-    it('produces executable bash script', () => {
+    it('produces an executable thin wrapper around `sugar run`', () => {
       const result = generateRalphLoop({
         phaseName: 'Core Types',
         maxIterations: 15,
         defaultModel: 'sonnet',
-        escalationModel: 'opus',
-        escalationThreshold: 3,
         sugarBin: 'npx sugar',
       });
       assert.ok(result.startsWith('#!/bin/bash'));
       assert.ok(result.includes('Core Types'));
-      assert.ok(result.includes('15')); // maxIterations
+      assert.ok(result.includes('15')); // maxIterations default
       assert.ok(result.includes('npx sugar'));
-      assert.ok(result.includes('pick-story'));
-      assert.ok(result.includes('story-update'));
-      assert.ok(result.includes('verify'));
+      assert.ok(result.includes('run'));
+      assert.ok(result.includes('exec'));
     });
 
-    it('uses sugar CLI for state management', () => {
+    it('does not duplicate iteration/escalation logic — all state lives behind `sugar run`', () => {
       const result = generateRalphLoop({
         phaseName: 'Test',
         maxIterations: 20,
         defaultModel: 'sonnet',
-        escalationModel: 'opus',
-        escalationThreshold: 2,
         sugarBin: 'sugar',
       });
-      // No Python one-liners
+      // The bash escalation counter, consensus grepping, and per-command
+      // sugar calls all moved into LoopRunner — the script only invokes `run`.
       assert.ok(!result.includes('python3'));
-      // Uses sugar CLI via $SUGAR variable
-      assert.ok(result.includes('pick-story'));
-      assert.ok(result.includes('snapshot'));
+      assert.ok(!result.includes('pick-story'));
+      assert.ok(!result.includes('story-update'));
+      assert.ok(!result.includes('CONSECUTIVE_FAILURES'));
+      assert.ok(result.includes('sugar run') || result.includes('run "$SCRIPT_DIR"'));
     });
   });
 });

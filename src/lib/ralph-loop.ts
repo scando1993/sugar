@@ -30,8 +30,14 @@ export class RalphLoop {
     return candidates.length > 0 ? candidates[0] : null;
   }
 
+  /**
+   * Namespaced by phase so parallel phase worktrees (which share the same
+   * repo-global tag namespace and, by default, number stories from US-001)
+   * never collide on the same tag pointing at two different commits.
+   */
   createSnapshot(storyId: string, attempt: number): string {
-    const tag = `attempt-${storyId}-v${attempt}`;
+    const phase = path.basename(this.workspacePath);
+    const tag = `sugar/${phase}/${storyId}/attempt-${attempt}`;
     try {
       execSync(`git tag "${tag}"`, { cwd: this.workspacePath, stdio: 'pipe' });
     } catch {

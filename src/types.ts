@@ -61,15 +61,26 @@ export interface EscalationConfig {
   threshold: number;
 }
 
+export type PermissionMode = 'skip' | 'acceptEdits' | 'default';
+
 export interface SugarConfig {
   models: ModelConfig;
   consensus: {
     quorumSize: number;
     requiredMajority: number;
+    maxTerms: number;
   };
   escalation: EscalationConfig;
   qualityChecks: string[];
   maxIterations: number;
+  /** Absolute path where phase worktrees are created. Defaults to /tmp/<repo>-phases when unset. */
+  workspaceBasePath?: string;
+  /** Permission mode passed to spawned implementer/verifier agents. */
+  permissionMode: PermissionMode;
+  /** Binary/command used to spawn implementer and verifier agents. */
+  runnerBin: string;
+  /** Command used by generated scripts to invoke this CLI. Resolved at generation time when unset. */
+  sugarBin?: string;
 }
 
 export const DEFAULT_CONFIG: SugarConfig = {
@@ -81,12 +92,15 @@ export const DEFAULT_CONFIG: SugarConfig = {
   consensus: {
     quorumSize: 3,
     requiredMajority: 2,
+    maxTerms: 3,
   },
   escalation: {
     threshold: 2,
   },
   qualityChecks: ['npm run typecheck', 'npm run lint', 'npm test'],
   maxIterations: 20,
+  permissionMode: 'acceptEdits',
+  runnerBin: 'claude',
 };
 
 // ============================================================
@@ -190,6 +204,38 @@ export interface DependencyGraph {
 }
 
 // ============================================================
+// Phase definitions (input to `sugar generate --phases <file>`)
+// ============================================================
+
+/**
+ * The schema of one entry in the `phases.json` file passed to
+ * `sugar generate --phases <file>`. One PhaseDefinition per Phase-2 workspace
+ * (created beforehand via `sugar workspace create <id>`).
+ */
+export interface PhaseDefinition {
+  /** Must match the workspace/branch name created in Phase 2. */
+  id: string;
+  /** Human-readable name used in execution.md and CLAUDE.md. */
+  name: string;
+  /** One or two sentences describing this phase's scope — becomes prd.json's description. */
+  scope: string;
+  /** Implementer model for this phase. Defaults to config.models.default. */
+  model?: string;
+  /** Artifacts/files/APIs/types this phase produces, for the dependency graph. */
+  produces: string[];
+  /** What this phase needs from other phases, for the dependency graph. */
+  consumes: string[];
+  /** IDs of other phases in this same phases.json that must complete first (hard dependencies). */
+  dependencies: string[];
+  /** Right-sized user stories, ordered by internal dependency. */
+  stories: Array<{
+    title: string;
+    description: string;
+    acceptanceCriteria: string[];
+  }>;
+}
+
+// ============================================================
 // Workspace
 // ============================================================
 
@@ -229,8 +275,6 @@ export interface RalphLoopContext {
   phaseName: string;
   maxIterations: number;
   defaultModel: string;
-  escalationModel: string;
-  escalationThreshold: number;
   sugarBin: string;         // path to sugar CLI for state management
 }
 

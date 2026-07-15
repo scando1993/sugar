@@ -3,6 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execSync } from 'child_process';
 import { RalphLoop } from '../src/lib/ralph-loop';
 import { ModelTier } from '../src/lib/model-tier';
 import { ConsensusEngine } from '../src/lib/consensus';
@@ -109,6 +110,22 @@ describe('RalphLoop', () => {
       const content = fs.readFileSync(path.join(tmpDir, 'progress.txt'), 'utf-8');
       assert.ok(content.includes('US-002'));
       assert.ok(content.includes('Learned something'));
+    });
+  });
+
+  describe('createSnapshot', () => {
+    it('namespaces the tag by phase (workspace directory name) so parallel phases never collide', () => {
+      execSync('git init -q', { cwd: tmpDir });
+      execSync('git config user.email t@t.com', { cwd: tmpDir });
+      execSync('git config user.name t', { cwd: tmpDir });
+      execSync('git add . && git commit -q -m init', { cwd: tmpDir });
+
+      const tag = loop.createSnapshot('US-002', 1);
+      const phaseName = path.basename(tmpDir);
+      assert.equal(tag, `sugar/${phaseName}/US-002/attempt-1`);
+
+      const tags = execSync('git tag', { cwd: tmpDir, encoding: 'utf-8' }).trim().split('\n');
+      assert.ok(tags.includes(tag));
     });
   });
 
