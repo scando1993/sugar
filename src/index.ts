@@ -468,18 +468,33 @@ function workspaceCmd(args: string[]): void {
     }
     case 'destroy': {
       const phase = args[1];
-      if (!phase) { console.error('Usage: sugar workspace destroy <phase>'); process.exit(1); }
-      mgr.destroyWorkspace({ phase, branch: phase, path: path.join(resolveWorkspaceBasePath(config, repoRoot), phase), model: '' });
-      console.log(`Destroyed workspace: ${phase}`);
+      if (!phase) { console.error('Usage: sugar workspace destroy <phase> [--force]'); process.exit(1); }
+      const force = args.includes('--force');
+      const result = mgr.destroyWorkspace(
+        { phase, branch: phase, path: path.join(resolveWorkspaceBasePath(config, repoRoot), phase), model: '' },
+        { force },
+      );
+      if (result.removed) {
+        console.log(`Destroyed workspace: ${phase}`);
+      } else {
+        console.log(`Worktree removed, branch kept: ${phase}`);
+        console.log(`  ${result.reason}`);
+      }
       break;
     }
     case 'cleanup': {
-      mgr.cleanupAll();
-      console.log('All workspaces cleaned up.');
+      const force = args.includes('--force');
+      const { removed, kept } = mgr.cleanupAll({ force });
+      if (removed.length > 0) console.log(`Cleaned up: ${removed.join(', ')}`);
+      if (kept.length > 0) {
+        console.log('Kept (unmerged branches — pass --force to delete anyway):');
+        for (const k of kept) console.log(`  ${k.phase}: ${k.reason}`);
+      }
+      if (removed.length === 0 && kept.length === 0) console.log('No workspaces found.');
       break;
     }
     default:
-      console.error('Usage: sugar workspace <list|create|destroy|cleanup>');
+      console.error('Usage: sugar workspace <list|create|destroy|cleanup> [--force]');
       process.exit(1);
   }
 }
@@ -590,7 +605,8 @@ function printUsage(): void {
   console.log('  sugar brainstorm <description>                   Generate brainstorm HTML');
   console.log('');
   console.log('  sugar config init                                Create sugar.config.json');
-  console.log('  sugar workspace <list|create|destroy|cleanup>    Manage workspaces');
+  console.log('  sugar workspace <list|create|destroy|cleanup> [--force]');
+  console.log('                                                    Manage workspaces (destroy/cleanup keep unmerged branches unless --force)');
   console.log('  sugar generate --phases <file> [--task <desc>]   Generate prd.json/CLAUDE.md/VERIFY.md/ralph-loop.sh + execution.md');
   console.log('  sugar run <workspace> [--max-iterations n] [--model m]');
   console.log('                                                    Run the Ralph loop for a workspace until complete/stuck/max iterations');

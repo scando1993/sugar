@@ -215,18 +215,58 @@ Group 4: `WS-E`, `WS-F` (parallel).
   references only commands that exist (`grep`-able check).
 - **F:** e2e smoke test green in CI; shellcheck clean on generated script.
 
-## 6. Open decisions (need owner input before the affected workstream starts)
+## 6. Open decisions — resolutions
 
-1. **Keep or drop the bash `ralph-loop.sh` entirely?** Plan assumes keep-as-thin-wrapper for
-   backward compat. Dropping simplifies WS-C but breaks documented invocations. *(Blocks WS-C.)*
-2. **Verifier isolation:** verifiers currently read `git diff HEAD~1 HEAD` in the same worktree —
-   run them in the workspace (cheap, chosen default) or in ephemeral read-only worktrees (safer)?
-   *(Blocks WS-B.)*
-3. **Default permission mode** for spawned agents: keep `--dangerously-skip-permissions` as an
-   opt-in config value (`permissionMode: "skip" | "acceptEdits" | "default"`), default to which?
-   Plan proposes defaulting to `acceptEdits`. *(Blocks WS-C templates.)*
-4. **`phase` / `orchestrate` / `sugar` naming:** consolidate on `sugar` and delete stale aliases?
-   *(Affects WS-E only.)*
+1. **Keep or drop the bash `ralph-loop.sh` entirely?** RESOLVED: kept as a thin wrapper
+   (`exec sugar run "$SCRIPT_DIR" ...`). All iteration logic moved into `LoopRunner`
+   (`src/lib/loop-runner.ts`); the shell script now only parses the two positional args and execs.
+2. **Verifier isolation:** RESOLVED: verifiers run in the same workspace (chosen default — cheap,
+   matches how implementers already operate there). `Verifier.runQuorum` (`src/lib/verifier.ts`)
+   spawns each verifier against the workspace's own `VERIFY.md`. Ephemeral read-only worktrees for
+   verification remain a possible future hardening, not implemented.
+3. **Default permission mode:** RESOLVED: defaults to `acceptEdits`
+   (`DEFAULT_CONFIG.permissionMode` in `src/types.ts`). `"skip"` (`--dangerously-skip-permissions`)
+   and `"default"` (fully interactive) remain available via `sugar.config.json`. SKILL.md's new
+   "Permission mode for spawned agents" section makes this an explicit, stated choice rather than
+   a silent default.
+4. **`phase` / `orchestrate` / `sugar` naming:** NOT resolved — left as-is. The `orchestrate`
+   directory name, `sugar` skill/frontmatter name, and the historical `phase` alias were not
+   touched. Purely a naming/identity cleanup with no functional impact; still open if wanted.
+
+## 8. Deviations from the original plan
+
+- **WS-D scope:** `sugar generate` looks up workspaces already created in Phase 2 via
+  `WorkspaceManager.listWorkspaces()` and fails loudly listing any phase whose workspace is
+  missing — it does not create workspaces itself (that stays Phase 2's job via
+  `sugar workspace create`). `PhaseDefinition` was moved from `orchestrator.ts` into `types.ts` as
+  the canonical `phases.json` schema, per §3 point 6's intent to make this input format
+  documented.
+- **WS-C additions beyond the plan text:** `sugar run` also fixes a case the plan didn't call out
+  by name — the claimed story is now *always* resolved to passed/rejected/blocked before the next
+  iteration, including when the agent process throws (simulated crash/timeout), not just when it
+  returns a recognizable result. This directly satisfies WS-C's acceptance criterion
+  ("kills/timeouts leave the story re-claimable") but required a broader try/catch than the
+  original per-outcome design implied.
+- **Auto-push dropped, not preserved:** the pre-existing (already broken — no verify command
+  existed) design had the implementer agent `git push origin <branch>` upon detecting phase
+  completion. The new design has `sugar run`, not the agent, detect completion, and it does not
+  push automatically. Pushing every phase branch to a remote without being asked conflicts with
+  this project's own "confirm before push" operating norm; it's left as an explicit, separate step
+  for Phase 4 (or the user), documented in README/SKILL.md rather than silently dropped.
+- **WS-E generation approach:** rather than hand-preserving each platform's previously
+  independently-authored (and already drifted) condensed prose, `scripts/sync-skills.ts`
+  regenerates all 6 non-Claude copies from the *full* canonical body (with per-platform
+  frontmatter and a `$ARGUMENTS`/`${input}`/no-substitution adapter). This makes drift
+  structurally impossible (one script, one source body) at the cost of the other platforms'
+  files being longer than their previous hand-tuned versions. `tests/sync-skills.test.ts` enforces
+  this stays true via `sugar sync-skills:check` in CI.
+- **WS-F scope addition:** added `tests/e2e-smoke.test.ts`, which spawns the real compiled CLI
+  (`sugar generate` → `sugar run`) against a fake `claude` executable through the actual
+  `execFileSync` spawn path in `src/lib/agent-runner.ts` — not just `LoopRunner` unit tests with
+  an injected stub. This is what would have caught F1 (missing `sugar verify`) before it shipped.
+- **Config field naming:** the plan's §3 point 5 proposed a `runner` config field for the agent
+  binary; implemented as `runnerBin` (`SugarConfig.runnerBin` in `src/types.ts`) for clarity
+  alongside the also-added `sugarBin`.
 
 ## 7. Working conventions for agents on this effort
 

@@ -47,7 +47,23 @@ export class WorkspaceManager {
     fs.writeFileSync(progressPath, content);
   }
 
-  destroyWorkspace(workspace: PhaseWorkspace): void {
+  /**
+   * A branch whose work was never merged still exists solely as that
+   * worktree's branch — force-deleting it on every cleanup would silently
+   * destroy completed-but-unmerged phase work if cleanup runs before Phase 4.
+   * `--merged` compares against the main repo's current HEAD.
+   */
+  private isBranchMerged(branch: string): boolean {
+    try {
+      const output = execSync('git branch --merged', { cwd: this.config.repoRoot, stdio: 'pipe' }).toString();
+      const merged = output.split('\n').map(line => line.replace(/^\*?\s*/, '').trim());
+      return merged.includes(branch);
+    } catch {
+      return false;
+    }
+  }
+
+  destroyWorkspace(workspace: PhaseWorkspace, options: { force?: boolean } = {}): { removed: boolean; reason?: string } {
     try {
       execSync(
         `git worktree remove "${workspace.path}" --force`,
@@ -55,6 +71,13 @@ export class WorkspaceManager {
       );
     } catch {
       // Worktree may not exist
+    }
+
+    if (!options.force && !this.isBranchMerged(workspace.branch)) {
+      return {
+        removed: false,
+        reason: `branch "${workspace.branch}" is not merged into HEAD — kept to avoid losing unmerged work (pass force to delete anyway)`,
+      };
     }
 
     try {
@@ -65,6 +88,7 @@ export class WorkspaceManager {
     } catch {
       // Branch may not exist
     }
+    return { removed: true };
   }
 
   listWorkspaces(): PhaseWorkspace[] {
@@ -100,10 +124,15 @@ export class WorkspaceManager {
     return workspaces;
   }
 
-  cleanupAll(): void {
+  cleanupAll(options: { force?: boolean } = {}): { removed: string[]; kept: Array<{ phase: string; reason: string }> } {
     const workspaces = this.listWorkspaces();
+    const removed: string[] = [];
+    const kept: Array<{ phase: string; reason: string }> = [];
+
     for (const ws of workspaces) {
-      this.destroyWorkspace(ws);
+      const result = this.destroyWorkspace(ws, options);
+      if (result.removed) removed.push(ws.phase);
+      else kept.push({ phase: ws.phase, reason: result.reason! });
     }
 
     try {
@@ -111,6 +140,8 @@ export class WorkspaceManager {
     } catch {
       // Ignore
     }
+
+    return { removed, kept };
   }
 
   writeFile(workspace: PhaseWorkspace, filename: string, content: string): void {
