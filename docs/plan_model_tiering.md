@@ -1,5 +1,13 @@
 # Plan: Implement Model Tiering Strategy
 
+> **Status: historical, executed and superseded.** This plan targeted the pre-TypeScript-extraction
+> architecture (bash logic inside `.claude/skills/orchestrate/SKILL.md`'s `ralph-loop.sh`
+> template — the line references below predate `src/lib/`). Model tiering now lives in
+> `ModelTier` (`src/lib/model-tier.ts`), driven by `sugar run`/`LoopRunner`
+> (`src/lib/loop-runner.ts`), with escalation state persisted to `.sugar-state.json`. See the
+> "Implementation status" section at the top of `model_tiering_strategy.md` for what changed.
+> Kept here as a historical record of the original step-by-step plan.
+
 ## Context
 
 The Ralph loop currently uses the same model for every iteration. Since prd.json stories are well-scoped and verifiable, cheaper models can execute them reliably while reserving expensive models for planning and escalation. This plan implements adaptive model tiering from `model_tiering_strategy.md`.

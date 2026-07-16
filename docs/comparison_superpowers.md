@@ -16,7 +16,7 @@
 | **Skill count** | 10 skills (orchestrate, prd, ralph, debug, review, tdd, brainstorm, worktree, finish, respond-review) | 14 skills covering the full dev lifecycle |
 | **Model management** | Model tiering with auto-escalation/de-escalation per phase | No model management — uses whatever the user configures |
 | **Session bootstrap** | Skill-on-demand | SessionStart hook injects bootstrap into every session |
-| **Library / API** | Full TypeScript library (`src/lib/`) — importable modules for ralph loop, consensus, dependency analysis, patterns, workspace, model tiering. 51 unit tests. | Zero — pure markdown/bash, no programmatic API |
+| **Library / API** | Full TypeScript library (`src/lib/`) — importable modules for ralph loop, consensus, dependency analysis, patterns, workspace, model tiering. 108 unit/integration tests. | Zero — pure markdown/bash, no programmatic API |
 | **Installation** | `npx skills add scando1993/sugar` (40+ agents) + manual install | Manual copy per platform |
 | **Dependencies** | TypeScript library (source of truth) + CLI + HTML dashboard | Zero — pure markdown/bash |
 
@@ -31,7 +31,7 @@ Superpowers requires a human in the loop for every task dispatch. The Ralph loop
 `prd.json` is machine-readable with a 6-status consensus lifecycle: `pending` -> `implementing` -> `verifying` -> `passed`/`rejected`/`blocked`. Each story carries `term`, `votes[]`, and `notes`. Superpowers tracks progress via markdown checkboxes in plan documents — fragile, hard to query, impossible to aggregate programmatically. The `src/index.ts` CLI can validate structure, report status with vote tallies, scan all phases with progress bars, and generate an interactive HTML dashboard. They have nothing equivalent.
 
 ### 3. True parallelism vs theoretical parallelism
-`ralph-loop.sh` processes launch in background with staggered starts and jitter. Superpowers has a `dispatching-parallel-agents` skill but it's a prompt — the human must manually coordinate agents in separate windows. sugar runs phases concurrently as actual OS processes.
+Multiple `sugar run <workspace>` processes (each phase's `ralph-loop.sh` is now a one-line wrapper that execs `sugar run`) launch in background with staggered starts. Superpowers has a `dispatching-parallel-agents` skill but it's a prompt — the human must manually coordinate agents in separate windows. sugar runs phases concurrently as actual OS processes.
 
 ### 4. Cross-session memory with structured patterns
 `progress.txt` carries "Codebase Patterns" and "Lessons Learned" across iterations. Between execution groups, patterns are extracted into `patterns.json` (structured format with name, description, `applies_to` scope, and example) and injected into the next group's `CLAUDE.md` under a `## Known Patterns` section. Superpowers has zero cross-session learning — every session starts completely fresh.
@@ -40,20 +40,20 @@ Superpowers requires a human in the loop for every task dispatch. The Ralph loop
 Phase 3a builds an explicit dependency graph, identifies parallel groups, sequential chains, and critical path. Superpowers' `writing-plans` skill creates a flat ordered task list with no dependency modeling.
 
 ### 6. Consensus verification (Raft-inspired)
-After every story implementation, a quorum of independent verifier agents review the diff and cast VOTE:PASS or VOTE:FAIL. A required majority must pass before the story is committed. Rejected stories get feedback in `rejection_log.txt` and return to "rejected" status for retry with a different approach. Superpowers has adversarial review but it's manually dispatched — ours runs automatically as part of the loop.
+After every story implementation, a quorum of independent verifier agents review the diff and cast VOTE:PASS or VOTE:FAIL. A required majority must pass before the story is committed. Rejected stories get feedback in `rejection_log.txt` and return to "rejected" status for retry with a different approach; a story that keeps failing consensus past `maxTerms` is marked `"blocked"` instead of retrying forever. Superpowers has adversarial review but it's manually dispatched — ours runs automatically as part of the loop, via `sugar verify` / `Verifier.runQuorum` (`src/lib/verifier.ts`), and is covered by an end-to-end test that spawns a real subprocess through the whole path (`tests/e2e-smoke.test.ts`).
 
 ### 7. Model tiering
-The loop starts with a cost-effective model (e.g., Sonnet), auto-escalates to a more capable model (e.g., Opus) after 2 consecutive failures, and de-escalates after success. Each phase can specify its own default model. Superpowers has no model management at all.
+The loop starts with a cost-effective model (e.g., Sonnet), auto-escalates to a more capable model (e.g., Opus) after 2 consecutive failures, and de-escalates after success. Each phase can specify its own default model. Escalation state persists across restarts in `.sugar-state.json`, so a resumed `sugar run` doesn't reset the tier. Superpowers has no model management at all.
 
 ### 8. Rollback and structured failure recovery
-Before each attempt, a snapshot tag (`attempt-US-001-v1`) is created for clean rollback. On 3rd failure, a structured report is written to `failure_log.json` (storyId, attempt, filesModified, failureType, lastError). Future agents read this to try a different approach. Superpowers just retries — no structured failure memory.
+Before each attempt, a snapshot tag namespaced by phase and story (`sugar/<phase>/<story-id>/attempt-<n>`) is created for clean rollback — namespacing matters because git tags are repo-global and parallel phases would otherwise collide on the same tag name. On 3rd failure, a structured report is written to `failure_log.json` (storyId, attempt, filesModified, failureType, lastError). Future agents read this to try a different approach. Superpowers just retries — no structured failure memory.
 
 ### 9. TypeScript library — testable, importable, extensible
-All execution logic lives in `src/lib/` as importable TypeScript modules: `RalphLoop`, `ConsensusEngine`, `DependencyAnalyzer`, `PatternManager`, `WorkspaceManager`, `ModelTier`, `Orchestrator`. Skills are thin behavioral wrappers that delegate to `sugar` CLI. This means:
-- **Testable**: 51 unit tests cover consensus tallying, dependency graph building, circular detection, pattern extraction, model escalation, story picking, and template generation.
-- **Importable**: `import { RalphLoop, ConsensusEngine } from 'sugar'` for custom implementations.
-- **Single source of truth**: Change consensus algorithm once in code → all 8 platforms inherit it. No syncing 8 markdown files.
-- **CLI for state management**: `sugar pick-story`, `sugar story-update`, `sugar verify`, `sugar snapshot`, `sugar propagate-patterns` — the ralph-loop.sh script calls these instead of inline Python one-liners.
+All execution logic lives in `src/lib/` as importable TypeScript modules: `RalphLoop`, `LoopRunner`, `ConsensusEngine`, `Verifier`, `DependencyAnalyzer`, `PatternManager`, `WorkspaceManager`, `ModelTier`, `Orchestrator`. Skills are thin behavioral wrappers that delegate to `sugar` CLI. This means:
+- **Testable**: 108 unit/integration tests, including a full end-to-end test that spawns the real compiled CLI (`sugar generate` → `sugar run`) against a fake `claude` executable through the actual subprocess spawn path, not just in-process stubs.
+- **Importable**: `import { RalphLoop, ConsensusEngine, LoopRunner } from 'sugar'` for custom implementations.
+- **Single source of truth**: Change consensus algorithm once in code → all 8 platforms inherit it. No syncing 8 markdown files (enforced by `scripts/sync-skills.ts` + a drift test — the other 6 skill copies are regenerated from the canonical `.claude/skills/orchestrate/SKILL.md`, not hand-maintained).
+- **CLI for state management**: 14 commands — `sugar generate`, `sugar run`, `sugar verify`, `sugar pick-story`, `sugar story-update`, `sugar snapshot`, `sugar propagate-patterns`, plus `validate`/`status`/`status-all`/`dashboard`/`brainstorm`/`config`/`workspace`. `ralph-loop.sh` now just execs `sugar run` instead of shelling out to each of these individually.
 
 Superpowers is pure markdown/bash — zero testability, zero reuse, zero programmatic API.
 
@@ -135,7 +135,7 @@ All lifecycle gaps are closed. Every skill ships on all 8 platforms.
 | Item | Status | What was built |
 | --- | --- | --- |
 | **G. Progress dashboard** | DONE | `orchestrate dashboard <base-path>` generates self-contained HTML with phase cards, progress bars, story detail tables. Opens in browser. |
-| **H. Rollback/recovery** | DONE | Snapshot tags (`attempt-US-001-v1`) before each attempt. Structured `failure_log.json` on 3rd failure. Future agents read failure reports to try different approaches. |
+| **H. Rollback/recovery** | DONE | Snapshot tags (`sugar/<phase>/<story-id>/attempt-<n>`, namespaced per phase) before each attempt. Structured `failure_log.json` on 3rd failure. Future agents read failure reports to try different approaches. |
 | **I. Pattern propagation** | DONE | `patterns.json` schema (name, description, applies_to, example). 4-step propagation between groups: parse progress.txt, extract to patterns.json, inject into next group's CLAUDE.md under `## Known Patterns`, update execution.md. |
 
 ### Additional items implemented (beyond original plan)
@@ -147,9 +147,31 @@ All lifecycle gaps are closed. Every skill ships on all 8 platforms.
 | **STORY_FAILED escalation** | Agent outputs STORY_FAILED after 3 attempts, triggering model escalation in the loop. |
 | **Model logging** | Each iteration logs model + result to progress.txt for observability. |
 | **Execution.md model strategy** | Generated by `Orchestrator.generateWorkspaceFiles()` — model strategy per phase with escalation thresholds. |
-| **TypeScript library extraction** | All execution logic extracted from SKILL.md into `src/lib/` (7 modules + 3 templates). Skills thinned to behavioral wrappers delegating to `sugar` CLI. 51 unit tests. Importable as `import { RalphLoop, ConsensusEngine } from 'sugar'`. |
+| **TypeScript library extraction** | All execution logic extracted from SKILL.md into `src/lib/` (14 modules + 3 templates, including `LoopRunner` and `Verifier`). Skills thinned to behavioral wrappers delegating to `sugar` CLI. 108 unit/integration tests, including a real subprocess-spawning end-to-end test. Importable as `import { RalphLoop, ConsensusEngine, LoopRunner } from 'sugar'`. |
 | **`npx skills add` install** | One-command install via `npx skills add scando1993/sugar -a <platform>` supporting 40+ agents. |
 | **Windsurf + Cline platforms** | Extended from 6 to 8 platforms with Windsurf (`.windsurf/rules/`) and Cline (`.cline/rules/`). |
+
+### 2026-07 remediation — closing the gap between "described" and "executes"
+
+An architectural review found that several items marked DONE above were correctly *designed* but
+not actually *wired up* — the CLI commands the generated bash scripts called (`sugar verify`) or
+that the skill instructed the agent to run (`sugar generate`) didn't exist, so consensus
+verification and Phase 3b generation never actually ran; every story would have been rejected by
+`ralph-loop.sh` and had its work wiped by `git checkout -- .`. This was fixed:
+
+| Item | What changed |
+| --- | --- |
+| **`sugar verify`** | Previously missing entirely. Now spawns the verifier quorum, tallies votes, enforces `maxTerms → blocked`. |
+| **`sugar generate`** | Previously the `Orchestrator` class existed but no CLI command called it. Now wires `--phases <file>` into `Orchestrator.generateWorkspaceFiles`. |
+| **`sugar run`** | New — the entire Ralph loop moved from bash (`ralph-loop.sh`, duplicating logic already in TypeScript) into `LoopRunner`. `ralph-loop.sh` is now a one-line wrapper. |
+| **Snapshot tags** | Were repo-global (`attempt-US-001-v1`) and collided across parallel phases sharing the same story-numbering scheme. Now namespaced `sugar/<phase>/<story-id>/attempt-<n>`. |
+| **Model-tier state** | Was in-memory only, discarded every CLI invocation. Now persisted to `.sugar-state.json`. |
+| **Phase 3c execution guidance** | Told the agent to launch phases with `ralph-loop.sh ... & wait` in one foreground Bash call — exceeds Claude Code's 10-minute execution cap. Now one backgrounded tool call per phase. |
+| **Skill copies** | 6 non-Claude platform copies had already drifted from the canonical `.claude/skills/orchestrate/SKILL.md` with no way to detect it. Now regenerated by `scripts/sync-skills.ts`, checked by a drift test. |
+
+All of the above is covered by `tests/e2e-smoke.test.ts`, which spawns the real compiled CLI
+(`sugar generate` → `sugar run`) against a fake `claude` executable through the actual subprocess
+path — the kind of test that would have caught the missing `sugar verify` before it shipped.
 
 ---
 
@@ -160,13 +182,13 @@ All lifecycle gaps are closed. Every skill ships on all 8 platforms.
 | **Best at** | Autonomous execution, consensus verification, model tiering, structured state, parallelism, TypeScript library with programmatic API, pressure-tested skills, full lifecycle coverage across 8 platforms | N/A — no remaining advantages |
 | **Philosophy** | "Let the machine run — with verification. Ship as a library." | "Trust but verify (actually, don't trust)" |
 | **Weakness** | Ongoing: expand pressure test coverage to all 10 skills (5/10 tested) | Can't run unattended; no structured state; no cross-session memory; no model management; no programmatic API; no tests |
-| **Moat** | Ralph loop + consensus quorum + prd.json state machine + model tiering + pattern propagation + TypeScript library (51 tests) + pressure-tested skills (5 rounds, 5 fixes) + `npx skills add` install + 10 skills × 8 platforms | None remaining |
+| **Moat** | Ralph loop + consensus quorum + prd.json state machine + model tiering + pattern propagation + TypeScript library (108 tests) + pressure-tested skills (5 rounds, 5 fixes) + `npx skills add` install + 10 skills × 8 platforms | None remaining |
 
 **The prompt hardening gap is closed.** Iron laws, rationalization tables, quality protocols, and anti-trust/anti-sycophancy rules across all 10 skills. Consensus verification (automatic quorum voting) is structurally stronger than their manual two-pass review.
 
 **The execution advantage has widened.** Model tiering, snapshot rollback, structured failure reports, and pattern propagation are capabilities they cannot replicate without a structured state machine. The Sugar CLI (`sugar pick-story`, `story-update`, `verify`, `snapshot`, `propagate-patterns`) replaces inline Python one-liners with tested, importable code.
 
-**The architecture advantage is new.** All execution logic lives in `src/lib/` as a TypeScript library with 51 unit tests. Skills are thin behavioral wrappers. `import { RalphLoop, ConsensusEngine, Orchestrator } from 'sugar'` for custom implementations. They have zero testability and zero reuse.
+**The architecture advantage is new.** All execution logic lives in `src/lib/` as a TypeScript library with 108 unit/integration tests. Skills are thin behavioral wrappers. `import { RalphLoop, ConsensusEngine, LoopRunner, Orchestrator } from 'sugar'` for custom implementations. They have zero testability and zero reuse.
 
 **The platform gap is surpassed.** All 10 skills ship on 8 platforms: Claude Code, GitHub Copilot (agents + prompts), Cursor, Windsurf, Cline, Codex, OpenCode, and Gemini CLI. One-command install via `npx skills add scando1993/sugar`.
 
@@ -184,4 +206,4 @@ All lifecycle gaps are closed. Every skill ships on all 8 platforms.
 | ~~2~~ | ~~Cross-platform reach~~ | CLOSED | 8 platforms: Claude Code, Copilot, Cursor, Windsurf, Cline, Codex, OpenCode, Gemini CLI. `npx skills add scando1993/sugar` for one-command install. |
 | ~~3~~ | ~~Remaining lifecycle skills~~ | CLOSED | 4 new skills: `/brainstorm` (diverge/converge ideation), `/worktree` (git worktree lifecycle), `/finish` (branch finishing + PR prep), `/respond-review` (receiving code review). Total: 10 skills. |
 | ~~4~~ | ~~Visual brainstorming companion~~ | CLOSED | `sugar brainstorm <description>` — interactive HTML with 4 phases: diverge (idea slots), cluster (drag-drop), evaluate (scoring sliders), converge (top picks with risks). |
-| ~~5~~ | ~~Logic trapped in markdown~~ | CLOSED | Full TypeScript library extraction (`src/lib/`): `RalphLoop`, `ConsensusEngine`, `DependencyAnalyzer`, `PatternManager`, `WorkspaceManager`, `ModelTier`, `Orchestrator` + 3 template generators + `sugar` CLI with 11 commands. 51 unit tests. Skills thinned to behavioral wrappers across all 8 platforms. |
+| ~~5~~ | ~~Logic trapped in markdown~~ | CLOSED | Full TypeScript library extraction (`src/lib/`): `RalphLoop`, `LoopRunner`, `ConsensusEngine`, `Verifier`, `DependencyAnalyzer`, `PatternManager`, `WorkspaceManager`, `ModelTier`, `Orchestrator` + 3 template generators + `sugar` CLI with 14 commands. 108 unit/integration tests. Skills thinned to behavioral wrappers across all 8 platforms. |

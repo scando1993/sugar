@@ -1,5 +1,14 @@
 # Plan: Implement Model Tiering + Raft Consensus
 
+> **Status: historical, executed and superseded.** This plan targeted the pre-TypeScript-extraction
+> architecture, where all logic lived as bash/markdown inside `.claude/skills/orchestrate/SKILL.md`
+> (the file:line references below predate `src/lib/`). The design it describes was later
+> extracted into a TypeScript library and then, in a 2026-07 remediation, wired up so the CLI
+> commands it depends on (`sugar verify`) actually exist and execute. For the current
+> architecture, see `src/lib/consensus.ts`, `src/lib/verifier.ts`, `src/lib/loop-runner.ts`, and
+> the "Implementation status" sections at the top of `raft_consensus_strategy.md` and
+> `model_tiering_strategy.md`. Kept here as a historical record of the original step-by-step plan.
+
 ## Context
 
 The Ralph loop currently has two gaps:

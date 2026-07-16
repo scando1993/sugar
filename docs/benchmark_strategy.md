@@ -4,14 +4,20 @@
 
 ## The Seven Contestants
 
+Not yet run — this is still a proposal, no benchmark harness has been built (see
+`raft_consensus_strategy.md`'s and `model_tiering_strategy.md`'s implementation-status notes).
+"ralph-loop.sh" below means `sugar run <workspace> --model <m>` — the script itself is now a
+one-line wrapper (`src/lib/templates/ralph-loop-sh.ts`); the model parameter still controls
+execution the same way.
+
 | # | System | Planning model | Execution model | Description |
 |---|---|---|---|---|
-| **A** | sugar (full) | Opus | Opus | Full phase workflow: plan → worktrees → prd.json → ralph-loop.sh |
+| **A** | sugar (full) | Opus | Opus | Full phase workflow: plan → worktrees → prd.json → `sugar run` |
 | **B1** | superpowers (auto-approved) | Opus | Opus | Full pipeline: brainstorming → writing-plans → subagent-driven-development. Human responses auto-approved to test pure capability. |
 | **B2** | superpowers (human-assisted) | Opus | Opus | Same as B1 but with a real human operator dispatching and reviewing. Tests whether human-in-the-loop actually improves results. |
 | **C** | naive Ralph | — | Opus | Raw `claude --print` loop with a basic CLAUDE.md and prd.json, no phases, no dependency analysis, no pattern propagation. All-Opus execution (~50K tokens/story × 10 stories × 3 phases = ~1.5M tokens → ~$90). |
-| **D** | sugar (tiered) | Opus | Sonnet | Same as A but ralph-loop.sh uses Sonnet for execution, Opus for planning only |
-| **E** | sugar (aggressive) | Opus | Haiku | Same as A but ralph-loop.sh uses Haiku for execution with Opus escalation on 2x failure |
+| **D** | sugar (tiered) | Opus | Sonnet | Same as A but `sugar run --model sonnet` for execution, Opus for planning only |
+| **E** | sugar (aggressive) | Opus | Haiku | Same as A but `sugar run --model haiku` for execution with Opus escalation on 2x failure |
 | **F** | sugar (adaptive) | Opus | Sonnet + Opus escalation | Same as D but with adaptive escalation: starts Sonnet, auto-escalates to Opus after 2 consecutive failures, de-escalates on success. See [Model Tiering Strategy](model_tiering_strategy.md) §Adaptive Escalation. |
 
 ### Key Questions
@@ -210,7 +216,7 @@ Separating performance from efficiency lets us answer three questions:
 
 > **Note:** All cost figures below are **hypotheses to be validated**, not predetermined results. The benchmark MUST measure actual token consumption via the token logger. The "estimated cost" row reflects pre-benchmark expectations; VALUE_SCORE will use measured costs.
 
-| Metric | A: orch-skills (Opus) | B1: superpowers (auto) | B2: superpowers (human) | C: naive Ralph (Opus) | D: orch-skills (Sonnet) | E: orch-skills (Haiku) | F: orch-skills (adaptive) |
+| Metric | A: sugar (Opus) | B1: superpowers (auto) | B2: superpowers (human) | C: naive Ralph (Opus) | D: sugar (Sonnet) | E: sugar (Haiku) | F: sugar (adaptive) |
 |---|---|---|---|---|---|---|---|
 | Task completion | High | High | High | Medium | High (slight drop) | Medium-High (more failures) | High (escalation recovers) |
 | Correctness | Medium-High | Medium-High | Highest | Medium | Medium (close to A) | Medium-Low (criteria drift) | Medium-High (Opus catches hard cases) |

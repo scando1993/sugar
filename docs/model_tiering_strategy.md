@@ -2,6 +2,35 @@
 
 ---
 
+## Implementation status (2026-07-15)
+
+**Implemented.** The escalation/de-escalation mechanics described below are real, but the
+mechanism is TypeScript (`ModelTier` in `src/lib/model-tier.ts`), driven by `sugar run`
+(`LoopRunner` in `src/lib/loop-runner.ts`) — not the bash `CURRENT_MODEL`/`CONSECUTIVE_FAILURES`
+variables shown in the §Adaptive Escalation script below, which is kept for historical reference.
+
+What differs from the original proposal:
+- **State persists across process restarts.** Escalation state (current model, consecutive
+  failures) is written to `.sugar-state.json` in the workspace after every iteration, so
+  resuming a killed/restarted `sugar run` continues from the same tier instead of resetting to
+  the default model.
+- **Escalation threshold is configurable**, not hardcoded to `2`: `sugar.config.json`'s
+  `escalation.threshold` (default `2`), loaded once per workspace from `prd.consensus`/config at
+  `sugar run` startup.
+- **The "STORY_FAILED" text-grep signal detection described below is gone.** The loop no longer
+  greps free-text stdout for `STORY_FAILED|stuck|blocked|retry.?exhausted` (that pattern is what
+  let an agent merely *mentioning* "blocked" trip a false escalation). The implementer writes a
+  structured `.sugar-result.json` (`{outcome: "failed", notes}`) as its final act instead; failure
+  is now also triggered whenever `LoopRunner` can't parse a clear result at all (agent crash,
+  timeout, malformed output) — see `raft_consensus_strategy.md`'s consensus-loop diagram for how
+  that "unverified failure" path also increments the model-escalation counter.
+- **Model tiering compounds with consensus, not just retries**: an implementation that fails
+  *verification* (not just implementation) also counts toward escalation — `ModelTier.recordResult`
+  is called with `false` whenever the verifier quorum rejects a story, not only on implementer
+  crashes.
+
+---
+
 ## Core Insight
 
 The Ralph loop decouples planning intelligence from execution intelligence. Each `prd.json` story is small, well-scoped, dependency-ordered, and verifiable — a recipe. You need a chef to **write** the recipe, not to **follow** it.
@@ -26,7 +55,11 @@ The Ralph loop decouples planning intelligence from execution intelligence. Each
 
 ## Adaptive Escalation in ralph-loop.sh
 
-Start cheap and escalate on failure:
+**Superseded.** Start cheap and escalate on failure — the *behavior* below is accurate, but it's
+implemented by `ModelTier` (`src/lib/model-tier.ts`) called from `LoopRunner`
+(`src/lib/loop-runner.ts`), not bash variables. `ralph-loop.sh` no longer contains this logic at
+all; it's a one-line wrapper: `exec sugar run "$SCRIPT_DIR" --max-iterations N --model M`. The
+script below is kept for historical reference — it was the original bash-first design:
 
 ```bash
 #!/bin/bash
@@ -160,10 +193,19 @@ sugar automates all four: the loop script controls the model flag, detects failu
 
 ## Implementation Checklist
 
-- [ ] Add `--model` parameter to `ralph-loop.sh` template in Phase 3b
-- [ ] Add `DEFAULT_MODEL` and `ESCALATION_MODEL` variables
-- [ ] Add failure detection pattern matching (STORY_FAILED, stuck, blocked)
-- [ ] Add escalation/de-escalation logic with configurable threshold
-- [ ] Update `execution.md` template to document model strategy per phase
-- [ ] Add model usage logging to `progress.txt` (track cost per story)
-- [ ] Benchmark: measure quality delta between Opus-only and tiered execution
+- [x] Add `--model` parameter — as `sugar run <workspace> --model <m>`, not a `ralph-loop.sh`
+      positional arg (though the generated wrapper still forwards `$2` for compatibility)
+- [x] Add default/escalation model tracking — `ModelTier` (`src/lib/model-tier.ts`), constructed
+      from `prd.consensus.implementModel`/`escalationModel` and `sugar.config.json`'s
+      `escalation.threshold`
+- [x] Replace pattern-matched failure detection (`STORY_FAILED|stuck|blocked`) with a structured
+      `.sugar-result.json` contract, with the old stdout markers kept only as a fallback
+      (see `raft_consensus_strategy.md`'s implementation-status note)
+- [x] Add escalation/de-escalation logic with configurable threshold (`ModelTier.recordResult`)
+- [ ] Update `execution.md` template to document model strategy per phase — the template
+      (`Orchestrator.buildExecutionMd`) documents the model **assigned** per phase but not the
+      escalation threshold/tier explicitly; still open
+- [x] Add model usage logging — `RalphLoop.recordProgress` appends model + result to
+      `progress.txt` every iteration
+- [ ] Benchmark: measure quality delta between Opus-only and tiered execution — not run; see
+      `benchmark_strategy.md` (proposal only, no harness built)

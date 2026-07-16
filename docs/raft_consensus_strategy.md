@@ -2,6 +2,34 @@
 
 ---
 
+## Implementation status (2026-07-15)
+
+**Implemented and executing**, not just designed. The mapping, safety properties, and prd.json
+schema below are the actual design and match `src/types.ts` closely. Where the implementation
+diverged from the original bash-centric proposal in this document, it's called out inline:
+
+- **The consensus loop is TypeScript, not bash.** `sugar verify` (`src/lib/verifier.ts`) spawns
+  the verifier quorum, parses `VOTE:PASS`/`VOTE:FAIL`, and tallies via `ConsensusEngine`
+  (`src/lib/consensus.ts`). `sugar run` (`src/lib/loop-runner.ts`, the `LoopRunner` class) drives
+  the whole loop — claim story, snapshot, implement, verify, commit/reject/block — as one
+  process, not a bash script shelling out to `claude` directly and grepping its stdout for
+  `VOTE:PASS`/`VOTE:FAIL` in a temp directory.
+- **Consensus is not opt-in/backward-compatible** the way this doc originally framed it — there
+  is no legacy non-consensus `passes: boolean` mode in `src/types.ts`. Every `prd.json` carries a
+  `consensus` block; it's the only mode.
+- **maxTerms is enforced**, not just modeled: `Verifier.runQuorum` blocks a story
+  (`status: "blocked"`) once `term >= consensus.maxTerms`, instead of retrying forever.
+- **Rejection logging is wired up**: `consensus.logRejection` writes to `rejection_log.txt` on
+  every consensus failure (this document's `nextIndex backtracking` idea, §5).
+- **Default verify model is Sonnet, not Haiku** (`DEFAULT_CONFIG.models.verify` in
+  `src/types.ts`) — Haiku verifiers (the Cost Analysis section below) remain available by setting
+  `models.verify: "haiku"` in `sugar.config.json`, but haven't been benchmarked for reliability.
+- **Still aspirational**: live calibration of verifier reliability per model tier (Phase 2 of the
+  roadmap below), and the benchmark harness (Phase 4, and see `benchmark_strategy.md`) — neither
+  has been built or run.
+
+---
+
 ## The Problem
 
 The Ralph loop has a self-assessment trust gap:
@@ -33,34 +61,42 @@ The implementing agent is judge, jury, and executioner. Superpowers addresses th
 
 ## The Consensus Loop
 
+Conceptual shape (unchanged); the boxes below map to real code, not bash — see
+`src/lib/loop-runner.ts` (`LoopRunner.run`/`runIteration`) and `src/lib/verifier.ts`
+(`Verifier.runQuorum`). `sugar run <workspace>` is the actual command a user or skill invokes;
+`ralph-loop.sh` is now a one-line wrapper around it.
+
 ```
-ralph-loop.sh (outer loop)
+sugar run <workspace>  (LoopRunner — one Node process, not a bash loop)
   │
   ├── Iteration N:
   │   │
-  │   ├── IMPLEMENT (Sonnet — the "Leader")
-  │   │   claude --model sonnet < CLAUDE.md
-  │   │   → Implements one story, runs checks, commits
-  │   │   → Outputs: STORY_IMPLEMENTED:US-003
+  │   ├── CLAIM — pick highest-priority pending/rejected story, set status: "implementing",
+  │   │   create snapshot tag sugar/<phase>/<story-id>/attempt-<n>
   │   │
-  │   ├── VERIFY (3x Haiku in parallel — the "Followers")
-  │   │   claude --model haiku < VERIFY.md &   # verifier 1
-  │   │   claude --model haiku < VERIFY.md &   # verifier 2
-  │   │   claude --model haiku < VERIFY.md &   # verifier 3
-  │   │   wait
+  │   ├── IMPLEMENT (the "Leader" — model from prd.consensus.implementModel, e.g. Sonnet)
+  │   │   agentRunner(CLAUDE.md, currentModel)  — spawns `claude --model X --print`
+  │   │   → Implementer writes .sugar-result.json {storyId, outcome: "implemented"}
+  │   │     (falls back to parsing STORY_IMPLEMENTED:US-003 from stdout if that's missing)
+  │   │
+  │   ├── VERIFY — Verifier.runQuorum (the "Followers")
+  │   │   Spawns prd.consensus.quorumSize agents against VERIFY.md, in sequence today
+  │   │   (parallelizing the spawns is a possible future optimization, not yet done)
   │   │   Each independently checks:
-  │   │   - Acceptance criteria satisfied in actual code?
-  │   │   - Quality checks pass? (typecheck, lint, tests)
+  │   │   - Acceptance criteria satisfied in the actual diff?
   │   │   - Implementation correct and complete?
-  │   │   → Outputs: VOTE:PASS or VOTE:FAIL:{reason}
+  │   │   → Outputs: VOTE:PASS or VOTE:FAIL:{criterion}:{reason}
+  │   │   (Quality checks — typecheck/lint/tests — are the IMPLEMENTER's responsibility per the
+  │   │   6-step quality protocol, run before it ever claims "implemented"; verifiers don't
+  │   │   re-run them, they inspect the diff.)
   │   │
-  │   ├── TALLY (bash — deterministic, no model needed)
-  │   │   Count PASS vs FAIL votes
-  │   │   Majority PASS → set passes: true, committed
-  │   │   Majority FAIL → collect reasons → feed to next attempt
-  │   │   Tie → escalate to Opus tiebreaker
+  │   ├── TALLY — ConsensusEngine.tallyVotes/runConsensusRound (deterministic, no model needed)
+  │   │   Count PASS vs FAIL votes, require quorum met AND majority reached
+  │   │   Majority PASS → commit, status: "passed", de-escalate model on success
+  │   │   Majority FAIL → status: "rejected" (or "blocked" once term >= maxTerms),
+  │   │     reasons written to rejection_log.txt, working tree reset
   │   │
-  │   └── Next iteration or PHASE_COMPLETE
+  │   └── Next iteration, or exit: "complete" (all passed) / "stuck" (some blocked)
 ```
 
 ---
@@ -189,6 +225,13 @@ We take the **consensus and commit protocol** from Raft, not the distributed inf
 
 The verifier prompt must be precise — check acceptance criteria literally, not "vibe check":
 
+**As-built, this is generated by `generateVerifyMd` (`src/lib/templates/verify-md.ts`), not
+hand-copied. The real template diverges from the draft below in one deliberate way: verifiers do
+NOT re-run quality checks (typecheck/lint/tests) — that's the implementer's job in its own 6-step
+quality protocol, before it ever claims `"implemented"`. Verifiers only inspect the diff
+(`git diff HEAD~1 HEAD`) against each acceptance criterion. This keeps verification read-only and
+cheap, matching the Cost Analysis assumption above.**
+
 ```markdown
 # Verifier Agent
 
@@ -230,6 +273,23 @@ self-assessment.
 ---
 
 ## ralph-loop.sh with Consensus
+
+**Superseded.** This bash script was the original design; it was never actually wired to a
+working `sugar verify` (that command didn't exist, so every story would have been rejected and
+its work wiped). The consensus loop below is now `LoopRunner`/`Verifier` in TypeScript
+(`src/lib/loop-runner.ts`, `src/lib/verifier.ts`), invoked via `sugar run <workspace>`.
+`ralph-loop.sh` (still generated per workspace) is now:
+
+```bash
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAX_ITERATIONS="${1:-20}"
+DEFAULT_MODEL="${2:-sonnet}"
+exec sugar run "$SCRIPT_DIR" --max-iterations "$MAX_ITERATIONS" --model "$DEFAULT_MODEL"
+```
+
+The rest of this section is kept for historical reference — it documents the original bash-first
+proposal that TypeScript replaced:
 
 ```bash
 #!/bin/bash
@@ -400,25 +460,33 @@ The sweet spot is **Sonnet implementer + Haiku verifiers**: 75% cheaper than Opu
 ## Implementation Roadmap
 
 ### Phase 1 — Schema update
-- [ ] Extend `UserStory` type with `status`, `term`, `votes` fields
-- [ ] Add `ConsensusConfig` to `PrdJson` interface
-- [ ] Update CLI validator to handle new schema (backward-compatible with old `passes` boolean)
+- [x] Extend `UserStory` type with `status`, `term`, `votes` fields (`src/types.ts`)
+- [x] Add `ConsensusConfig` to `PrdJson` interface (`src/types.ts`)
+- [x] Update CLI validator to handle the schema — **deviation**: consensus is mandatory, not
+      backward-compatible with an old `passes` boolean; there is no legacy mode
 
 ### Phase 2 — VERIFY.md template
-- [ ] Write verifier prompt with iron laws and rationalization tables
-- [ ] Test with Haiku on 3-5 known-good and known-bad implementations
-- [ ] Calibrate: does Haiku reliably catch real issues without false rejecting?
+- [x] Write verifier prompt with iron laws and rationalization tables
+      (`src/lib/templates/verify-md.ts`)
+- [ ] Test with Haiku on 3-5 known-good and known-bad implementations — not yet run
+- [ ] Calibrate: does Haiku reliably catch real issues without false rejecting? — not yet measured
 
 ### Phase 3 — Loop integration
-- [ ] Update `ralph-loop.sh` template with consensus phases
-- [ ] Add `rejection_log.txt` mechanism for structured retry feedback
-- [ ] Add `--consensus` flag to enable/disable (backward-compatible)
-- [ ] Update CLAUDE.md template to read rejection_log.txt on retry attempts
+- [x] Consensus loop implemented — as `LoopRunner`/`Verifier` in TypeScript
+      (`src/lib/loop-runner.ts`, `src/lib/verifier.ts`), not a `ralph-loop.sh` bash rewrite;
+      `ralph-loop.sh` is now a thin wrapper that execs `sugar run`
+- [x] Add `rejection_log.txt` mechanism for structured retry feedback (`ConsensusEngine.logRejection`,
+      called from `Verifier.runQuorum` on every consensus failure)
+- [ ] ~~Add `--consensus` flag to enable/disable~~ — not applicable; consensus is the only mode
+- [x] Implementer reads `failure_log.json`/`rejection_log.txt` context before retrying
+      (`CLAUDE.md` template, `src/lib/templates/claude-md.ts`)
 
 ### Phase 4 — Benchmark
-- [ ] Add contestant F (Sonnet + Haiku consensus) to benchmark strategy
-- [ ] Compare against A (Opus solo) and D (Sonnet tiered, no consensus)
-- [ ] Measure: does consensus actually improve pass rate? At what cost delta?
+- [ ] Add contestant F (Sonnet + Haiku consensus) to benchmark strategy — not started
+- [ ] Compare against A (Opus solo) and D (Sonnet tiered, no consensus) — not started
+- [ ] Measure: does consensus actually improve pass rate? At what cost delta? — not measured;
+      an end-to-end smoke test (`tests/e2e-smoke.test.ts`) proves the mechanism *executes*
+      correctly, but says nothing about real-world pass-rate/cost tradeoffs
 
 ---
 

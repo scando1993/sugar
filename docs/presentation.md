@@ -164,21 +164,7 @@ The consensus mechanism compounds with the model tiering strategy (see [model_ti
 
 The sweet spot is **Sonnet implementer + Haiku verifiers**: 75% cheaper than Opus solo with HIGHER quality due to independent verification.
 
-he Ralph loop currently uses the same model for every iteration. Since prd.json stories are well-scoped and verifiable, cheaper models can execute them reliably while reserving expensive models for planning and escalation. This plan implements adaptive model tiering from `model_tiering_strategy.md`.
-
 ---
-
-## Execution Order
-
-```
-Step 1 (ralph-loop.sh template — core change)
-  ↓
-Step 2 (CLAUDE.md template — STORY_FAILED signal)
-  ↓
-Step 3 + 4 (launch examples + execution.md — same file, minor edits)
-  ↓
-Step 5 + 6 (sync to Copilot — parallel, different files)
-```
 
 # Deep Competitive Analysis: sugar vs obra/superpowers
 
@@ -194,8 +180,8 @@ Step 5 + 6 (sync to Copilot — parallel, different files)
 | **Parallelism** | Real — multiple `ralph-loop.sh` processes running simultaneously in background | Conceptual — `dispatching-parallel-agents` skill exists but requires manual orchestration |
 | **Autonomy** | High — loop runs unattended with model tiering, auto-escalation, rollback, and consensus verification | Low — human must initiate each task dispatch, review each result |
 | **Prompt hardening** | Iron laws, rationalization tables, quality protocol, STORY_FAILED escalation | Iron laws, rationalization tables, anti-sycophancy rules, pressure-tested |
-| **Platforms** | 2 (Claude Code, GitHub Copilot) | 6+ (Claude Code, Cursor, Codex, OpenCode, Gemini CLI, Copilot CLI) |
-| **Skill count** | 6 skills (orchestrate, prd, ralph, debug, review, tdd) | 14 skills covering the full dev lifecycle |
+| **Platforms** | 8 (Claude Code, GitHub Copilot, Cursor, Windsurf, Cline, Codex, OpenCode, Gemini CLI) | 6+ (Claude Code, Cursor, Codex, OpenCode, Gemini CLI, Copilot CLI) |
+| **Skill count** | 10 skills (orchestrate, prd, ralph, debug, review, tdd, brainstorm, worktree, finish, respond-review) | 14 skills covering the full dev lifecycle |
 | **Model management** | Model tiering with auto-escalation/de-escalation per phase | No model management — uses whatever the user configures |
 | **Session bootstrap** | Skill-on-demand | SessionStart hook injects bootstrap into every session |
 
@@ -225,7 +211,7 @@ After every story implementation, a quorum of independent verifier agents review
 The loop starts with a cost-effective model (e.g., Sonnet), auto-escalates to a more capable model (e.g., Opus) after 2 consecutive failures, and de-escalates after success. Each phase can specify its own default model. Superpowers has no model management at all.
 
 ### 8. Rollback and structured failure recovery
-Before each attempt, a snapshot tag (`attempt-US-001-v1`) is created for clean rollback. On 3rd failure, a structured report is written to `failure_log.json` (storyId, attempt, filesModified, failureType, lastError). Future agents read this to try a different approach. Superpowers just retries — no structured failure memory.
+Before each attempt, a snapshot tag namespaced by phase and story (`sugar/<phase>/<story-id>/attempt-<n>`) is created for clean rollback. On 3rd failure, a structured report is written to `failure_log.json` (storyId, attempt, filesModified, failureType, lastError). Future agents read this to try a different approach. Superpowers just retries — no structured failure memory.
 
 ### 9. Visual brainstorming companion
 They ship a zero-dependency Node.js server that renders HTML mockups during design phase — the agent pushes screens, the user clicks choices, events flow back. We have nothing for pre-implementation visualization.

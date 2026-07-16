@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Orchestration Skills — Interactive Workflow Flowchart</title>
+<title>Sugar — Interactive Workflow Flowchart</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -912,9 +912,10 @@
       <tr><td>prd.json</td><td>each phase workspace</td><td>Phase 3b</td><td>Ralph-format user stories (state machine)</td></tr>
       <tr><td>progress.txt</td><td>each phase workspace</td><td>Phase 2</td><td>Progress log + codebase patterns</td></tr>
       <tr><td>CLAUDE.md</td><td>each phase workspace</td><td>Phase 3b</td><td>Ralph agent instructions</td></tr>
-      <tr><td>ralph-loop.sh</td><td>each phase workspace</td><td>Phase 3b</td><td>Iteration loop (spawns fresh agents per story)</td></tr>
+      <tr><td>ralph-loop.sh</td><td>each phase workspace</td><td>Phase 3b</td><td>Thin wrapper that execs <code>sugar run</code> for this workspace</td></tr>
       <tr><td>merge_order.md</td><td>repo root</td><td>Phase 4</td><td>Merge sequence and conflict expectations</td></tr>
       <tr><td>VERIFY.md</td><td>each worktree</td><td>Phase 3b</td><td>Verifier agent instructions + vote format</td></tr>
+      <tr><td>.sugar-state.json</td><td>each phase workspace</td><td>Phase 3c</td><td>Model-tier state + per-story attempt counters, written every iteration by <code>sugar run</code></td></tr>
       <tr><td>patterns.json</td><td>repo root</td><td>Phase 3c (between groups)</td><td>Extracted codebase patterns for propagation</td></tr>
       <tr><td>failure_log.json</td><td>each phase workspace</td><td>Phase 3b</td><td>Structured failure reports for retry strategy</td></tr>
     </tbody>
@@ -1247,7 +1248,7 @@
       <div class="step-number" style="background: var(--phase3c);">1</div>
       <div class="step-body">
         <h4>Launch Group 1 (No Dependencies)</h4>
-        <p>All phases with zero dependencies launch their <code>ralph-loop.sh</code> scripts simultaneously in background processes. Each loop runs independently.</p>
+        <p>All phases with zero dependencies launch <code>sugar run &lt;workspace&gt;</code> as its own separately-backgrounded call — not multiple processes joined with a single foreground <code>wait</code>, which would exceed typical tool execution time limits. Each loop runs independently.</p>
       </div>
     </div>
 
@@ -1278,8 +1279,8 @@
     <div class="step-card" data-delay="400">
       <div class="step-number" style="background: var(--phase3c);">5</div>
       <div class="step-body">
-        <h4>Push All Branches</h4>
-        <p>Each phase pushes its branch to origin upon completion. Update <code>todo.md</code> checkboxes and <code>execution.md</code> with actual results.</p>
+        <h4>Sync Tracking Files</h4>
+        <p>Update <code>todo.md</code> checkboxes and <code>execution.md</code> with actual results. <code>sugar run</code> does not push branches automatically — pushing is a deliberate, separate step the user or Phase 4 takes explicitly.</p>
       </div>
     </div>
   </div>
@@ -1288,7 +1289,7 @@
     <h4>Decision: All Stories Passing?</h4>
     <div class="decision-paths">
       <div class="decision-path yes"><strong>All pass</strong> — Proceed to Phase 4: Merge</div>
-      <div class="decision-path no"><strong>Some blocked</strong> — Check <code>prd.json</code> notes, fix blockers, resume <code>ralph-loop.sh</code></div>
+      <div class="decision-path no"><strong>Some blocked</strong> — Check <code>prd.json</code> notes, fix blockers, resume with <code>sugar run &lt;workspace&gt;</code></div>
     </div>
   </div>
 </div>
@@ -1367,65 +1368,65 @@
   </div>
 
   <div class="info-box tip">
-    The Ralph pattern is the core execution engine. Each phase workspace runs this loop independently. A bash script (<code>ralph-loop.sh</code>) spawns fresh agent instances — one per story — with <strong>model tiering</strong> (auto-escalation on repeated failures) and <strong>consensus verification</strong> (Raft-inspired quorum voting).
+    The Ralph pattern is the core execution engine. Each phase workspace runs this loop independently via <code>sugar run &lt;workspace&gt;</code> — a TypeScript command (<code>LoopRunner</code>) that spawns fresh agent instances one per story, with <strong>model tiering</strong> (auto-escalation on repeated failures, persisted across restarts) and <strong>consensus verification</strong> (Raft-inspired quorum voting via <code>Verifier</code>/<code>sugar verify</code>). <code>ralph-loop.sh</code> still exists per workspace but is now a one-line wrapper that execs <code>sugar run</code>.
   </div>
 
   <div class="ralph-loop-visual" id="ralph-visual">
 
-    <div class="loop-node start">ralph-loop.sh starts (max N iterations, default model)</div>
+    <div class="loop-node start">sugar run &lt;workspace&gt; starts (max N iterations, default model)</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node action">Create snapshot tag: attempt-${STORY_ID}-v${N}</div>
+    <div class="loop-node check">LoopRunner picks highest-priority pending/rejected story, claims it (status: "implementing")</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node file">Agent reads prd.json + progress.txt + failure_log.json</div>
-    <div class="loop-arrow">&darr;</div>
-
-    <div class="loop-node check">Pick highest priority incomplete story</div>
+    <div class="loop-node action">Create snapshot tag: sugar/&lt;phase&gt;/${STORY_ID}/attempt-${N}</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-branch">
       <div class="loop-branch-item" style="background: rgba(188,140,255,0.08); border: 1px solid rgba(188,140,255,0.3); color: var(--accent-purple);">
-        None found?<br><strong>PHASE_COMPLETE</strong><br>Push &amp; exit
+        None left?<br><strong>Exit</strong><br>complete (all passed) or stuck (some blocked)
       </div>
       <div class="loop-branch-item" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
-        Story found?<br><strong>Implement it</strong><br>&darr;
+        Story claimed?<br><strong>Spawn implementer</strong><br>&darr;
       </div>
     </div>
+    <div class="loop-arrow">&darr;</div>
+
+    <div class="loop-node file">Implementer reads prd.json (finds its claimed story) + progress.txt + failure_log.json</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-node action">Implement the single user story</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node action">Output STORY_IMPLEMENTED:US-XXX</div>
+    <div class="loop-node action">Write .sugar-result.json {outcome: "implemented"} (or STORY_IMPLEMENTED:US-XXX as stdout fallback)</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node check">Launch verifier quorum (parallel agents)</div>
+    <div class="loop-node check">Verifier.runQuorum spawns the verifier quorum</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node file">Each verifier: read diff, run checks, cast VOTE:PASS or VOTE:FAIL</div>
+    <div class="loop-node file">Each verifier: read the diff, cast VOTE:PASS or VOTE:FAIL:{criterion}:{reason} (read-only — no quality checks re-run)</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node check">Tally votes — required majority?</div>
+    <div class="loop-node check">ConsensusEngine tallies votes — quorum met AND required majority?</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-branch">
       <div class="loop-branch-item" style="background: rgba(63,185,80,0.08); border: 1px solid rgba(63,185,80,0.3); color: var(--accent-green);">
-        Majority pass?<br><strong>Commit</strong><br><code>feat: US-001 - Title</code>
+        Majority pass?<br><strong>Commit</strong><br><code>feat: US-001 - verified by consensus</code>
       </div>
       <div class="loop-branch-item" style="background: rgba(248,81,73,0.08); border: 1px solid rgba(248,81,73,0.3); color: var(--accent-red);">
-        Majority fail?<br><strong>Reject + log</strong><br>Reset changes, record in rejection_log.txt
+        Majority fail?<br><strong>Reject + log</strong><br>Reset changes, record in rejection_log.txt; "blocked" once term &ge; maxTerms
       </div>
     </div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node check">Model escalation: 2+ consecutive failures &rarr; upgrade model</div>
+    <div class="loop-node check">Model escalation: 2+ consecutive failures &rarr; upgrade model (state persisted in .sugar-state.json)</div>
     <div class="loop-arrow">&darr;</div>
 
     <div class="loop-node file">Log model + result to progress.txt</div>
     <div class="loop-arrow">&darr;</div>
 
-    <div class="loop-node complete">Agent exits. Loop spawns fresh iteration.</div>
+    <div class="loop-node complete">Iteration ends. LoopRunner spawns the next iteration.</div>
 
   </div>
 
@@ -1455,7 +1456,7 @@
     <div class="concept-card" style="--card-color: var(--accent-orange);">
       <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x25cb;</div>
       <h4>Default Model</h4>
-      <p>Start with a cost-effective model (e.g., Sonnet). Configurable per phase via <code>ralph-loop.sh 20 sonnet</code>.</p>
+      <p>Start with a cost-effective model (e.g., Sonnet). Configurable per phase via <code>sugar run &lt;workspace&gt; --max-iterations 20 --model sonnet</code>.</p>
     </div>
     <div class="concept-card" style="--card-color: var(--accent-orange);">
       <div class="concept-icon" style="background: rgba(210,153,34,0.15); color: var(--accent-orange);">&#x2191;</div>
@@ -1475,7 +1476,7 @@
     <div class="concept-card" style="--card-color: var(--accent-cyan);">
       <div class="concept-icon" style="background: rgba(57,210,192,0.15); color: var(--accent-cyan);">{ }</div>
       <h4>prd.json</h4>
-      <p>State machine. Which stories are done (<code>passes: true</code>), which are blocked (<code>notes</code> field). Each new agent reads this to find its work.</p>
+      <p>State machine. Which stories are done (<code>status: "passed"</code>), which are blocked (<code>status: "blocked"</code> + <code>notes</code> field). LoopRunner reads this to pick and claim the next story.</p>
     </div>
     <div class="concept-card" style="--card-color: var(--accent-green);">
       <div class="concept-icon" style="background: rgba(63,185,80,0.15); color: var(--accent-green);">&#x1d4ab;</div>
@@ -1490,7 +1491,7 @@
   </div>
 
   <div class="info-box warn">
-    <strong>Error recovery:</strong> Before each attempt, a snapshot tag (<code>attempt-US-001-v1</code>) is created for rollback. If quality checks fail 3 times, the agent writes a structured report to <code>failure_log.json</code> (storyId, attempt, filesModified, failureType, lastError), resets changes, and moves to the next story. Future agents read failure_log.json to try a DIFFERENT approach.
+    <strong>Error recovery:</strong> Before each attempt, a snapshot tag namespaced by phase and story (<code>sugar/&lt;phase&gt;/&lt;story-id&gt;/attempt-&lt;n&gt;</code>) is created for rollback — namespacing avoids collisions since git tags are repo-global and parallel phases would otherwise share the same tag name. If quality checks fail 3 times, the loop writes a structured report to <code>failure_log.json</code> (storyId, attempt, filesModified, failureType, lastError), resets changes, and moves to the next story. Future agents read failure_log.json to try a DIFFERENT approach.
   </div>
 </div>
 

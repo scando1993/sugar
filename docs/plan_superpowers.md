@@ -1,5 +1,15 @@
 # Plan: Implement All Suggested Features from Superpowers Comparison
 
+> **Status: historical, executed (see `comparison_superpowers.md`'s "Action Plan — Implementation
+> Status" tables — all items A-I are marked DONE) and partially superseded.** The skills, iron
+> laws, rationalization tables, dashboard, and pattern propagation described here were built and
+> still exist largely as designed. What's superseded: steps that describe editing bash inside
+> `ralph-loop.sh` (Steps B/H's snapshot-tag and failure-log logic, Step I's pattern injection call
+> points) — that logic now lives in TypeScript (`src/lib/loop-runner.ts`, `src/lib/verifier.ts`,
+> `src/lib/patterns.ts`) behind `sugar run`/`sugar generate`/`sugar propagate-patterns`, not
+> inline in the generated shell script. Kept here as a historical record of the original
+> step-by-step plan.
+
 ## Context
 
 The competitive analysis (`comparison_superpowers.md`) identified 9 features (A-I) across 3 tiers to close gaps with obra/superpowers while maintaining our autonomous execution advantage. This plan covers all of them.

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sugar Rush - Orchestration Skills</title>
+<title>Sugar Rush</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
@@ -765,7 +765,7 @@
           Sonnet (Leader)
         </div>
         <div style="flex:1;padding:12px 20px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary);">
-          Picks next <code>pending</code> story from prd.json &rarr; implements with TDD &rarr; commits &rarr; outputs <span style="color:var(--accent-yellow);font-weight:600;">STORY_IMPLEMENTED:US-003</span>
+          Implements the story the loop already claimed &rarr; runs TDD/quality checks &rarr; outputs <span style="color:var(--accent-yellow);font-weight:600;">STORY_IMPLEMENTED:US-003</span> (the loop commits only after consensus passes)
         </div>
       </div>
       <!-- Verify -->
@@ -775,14 +775,14 @@
           Haiku (Followers)
         </div>
         <div style="flex:1;padding:12px 20px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary);">
-          Each independently: check acceptance criteria against <strong>actual code</strong> (not commit msg) &rarr; run quality checks &rarr; cast <span style="color:var(--accent-secondary);font-weight:600;">VOTE:PASS</span> or <span style="color:var(--accent-warn);font-weight:600;">VOTE:FAIL:{reason}</span>
+          Each independently: check acceptance criteria against <strong>actual code</strong> (not commit msg, read-only — no re-running checks) &rarr; cast <span style="color:var(--accent-secondary);font-weight:600;">VOTE:PASS</span> or <span style="color:var(--accent-warn);font-weight:600;">VOTE:FAIL:{reason}</span>
         </div>
       </div>
       <!-- Tally -->
       <div style="display:flex;gap:20px;align-items:center;margin-bottom:16px;">
         <div class="flow-node bash" style="min-width:200px;">
           <div style="font-size:0.7rem;opacity:0.7;margin-bottom:4px;">TALLY</div>
-          Bash (deterministic)
+          TypeScript (deterministic)
         </div>
         <div style="flex:1;padding:12px 20px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);font-size:0.85rem;color:var(--text-secondary);">
           2/3 PASS &rarr; <span class="badge badge-green">committed</span> &nbsp;|&nbsp; 2/3 FAIL &rarr; <span class="badge badge-red">rejected + feedback</span> &nbsp;|&nbsp; Tie &rarr; <span class="badge badge-purple">Opus tiebreaker</span>
@@ -1027,13 +1027,13 @@
           <tr>
             <td><strong>Platforms Supported</strong></td>
             <td style="color:var(--accent-secondary);">6+</td>
-            <td>2</td>
-            <td><span class="badge badge-red">Superpowers wins</span></td>
+            <td>8</td>
+            <td><span class="badge badge-green"><span class="winner-icon">&#10003;</span>Sugar Rush wins</span></td>
           </tr>
           <tr>
             <td><strong>Skill Count</strong></td>
             <td style="color:var(--accent-secondary);">14</td>
-            <td>6</td>
+            <td>10</td>
             <td><span class="badge badge-red">Superpowers wins</span></td>
           </tr>
         </tbody>
